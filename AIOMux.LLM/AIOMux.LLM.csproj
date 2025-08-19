@@ -5,13 +5,22 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Title>AIOMux LLM</Title>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Adrian Cantu</Authors>
     <Company>AIOMux</Company>
     <Product>AIOMux LLM</Product>
     <Description>Provides LLM client implementations and abstractions for agent interaction.</Description>
     <PackageProjectUrl>aiomux.io</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/aiomux/AIOMux/</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\AIOMux.Core\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
