@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36121.58
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Core", "AIOMux.Core\AIOMux.Core.csproj", "{CC231BE5-A970-469B-9837-4562A7189A1F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.LLM", "AIOMux.LLM\AIOMux.LLM.csproj", "{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CC231BE5-A970-469B-9837-4562A7189A1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CC231BE5-A970-469B-9837-4562A7189A1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CC231BE5-A970-469B-9837-4562A7189A1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CC231BE5-A970-469B-9837-4562A7189A1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D1DBB4C4-5D2B-44DF-930F-8F96A31BEEAD}
+	EndGlobalSection
+EndGlobal
