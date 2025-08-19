@@ -1,6 +1,6 @@
 # AIOMux.Core
 
-AIOMux.Core is a modern, extensible .NET library for building, orchestrating, and scaling intelligent agent systems. It provides a robust foundation for AI-driven applications, enabling you to compose, chain, and manage agents, integrate LLMs, and extend functionality with plugins and tools—all with a clean, modular architecture.
+AIOMux.Core is a modern, extensible .NET library for building, orchestrating, and scaling intelligent agent systems. It provides a robust foundation for AI-driven applications, enabling you to compose, chain, and manage agents, integrate LLMs, and extend functionality with plugins and tools-all with a clean, modular architecture.
 
 ## Key Features
 - **Agent orchestration:** Register, compose, and execute agents and agent chains
@@ -14,7 +14,7 @@ AIOMux.Core is a modern, extensible .NET library for building, orchestrating, an
 
 ### 1. Basic: Register and Run a Simple Agentusing AIOMux.Core;
 using AIOMux.Core.Interfaces;
-
+```
 public class EchoAgent : IAgent
 {
     public string Name => "EchoAgent";
@@ -31,16 +31,18 @@ if (agent != null)
     var result = await agent.ExecuteAsync(context);
     Console.WriteLine(result);
 }
-
+```
 ### 2. Implementing a Tool (ITool)using AIOMux.Core.Interfaces;
+```
 public class UppercaseTool : ITool
 {
     public string Name => "Uppercase";
     public Task<string> ExecuteAsync(string input)
         => Task.FromResult(input.ToUpperInvariant());
 }
-
+```
 ### 3. Implementing an Agent Plugin (IAgentPlugin)using AIOMux.Core.Interfaces;
+```
 public class MyPlugin : IAgentPlugin
 {
     public AgentMetadata Metadata => new() { Name = "MyPluginAgent", Description = "A sample plugin agent." };
@@ -56,8 +58,9 @@ public class MyPluginAgent : IAgent
     public Task<string> ExecuteAsync(AgentContext context)
         => Task.FromResult("Plugin agent executed!");
 }
-
+```
 ### 4. Intermediate: Using OllamaClient from AIOMux.LLMusing AIOMux.LLM;
+```
 var llm = new OllamaClient(model: "llama3");
 string response = await llm.GenerateAsync("What is the capital of France?");
 Console.WriteLine(response);
@@ -71,8 +74,9 @@ chain.AddAgent(agentA).AddAgent(agentB);
 var context = new AgentContext { UserInput = "Start chain" };
 var result = await chain.ExecuteAsync(context);
 Console.WriteLine(result);
-
+```
 ### 6. Advanced: Load Agent Plugins Dynamically
+```
 var manager = new AgentManager();
 bool loaded = await manager.LoadPluginAsync("./plugins/AIOMux.Plugin.MyPlugin.dll");
 if (loaded)
@@ -85,6 +89,7 @@ if (loaded)
         Console.WriteLine(result);
     }
 }
+```
 See also: [AIOMux.LLM](../AIOMux.LLM/) for LLM client implementations.
 
 More examples soon...
