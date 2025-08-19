@@ -1,53 +1,93 @@
-# AIOMux
+# AIOMux.Core
 
-AIOMux is a modular .NET solution for building, orchestrating, and extending AI-powered agents and tools. It is designed for flexibility, plugin support, and integration with large language models (LLMs).
+AIOMux.Core is a modern, extensible .NET library for building, orchestrating, and scaling intelligent agent systems. It provides a robust foundation for AI-driven applications, enabling you to compose, chain, and manage agents, integrate LLMs, and extend functionality with plugins and tools—all with a clean, modular architecture.
 
-## Projects
+## Key Features
+- **Agent orchestration:** Register, compose, and execute agents and agent chains
+- **LLM abstraction:** Plug in local or cloud LLMs (see AIOMux.LLM)
+- **Plugin system:** Dynamically load agent plugins at runtime
+- **Tooling:** Add custom tools for agent use
+- **Configuration & validation:** Strongly-typed, extensible config
+- **Metrics & memory:** Built-in support for agent metrics and memory stores
 
-### AIOMux.Core
-- Core agent orchestration and management
-- Agent plugin architecture
-- Agent chains and context management
-- Interfaces for agents, plugins, and tools
+## Examples
 
-### AIOMux.LLM
-- LLM client implementations (e.g., Ollama)
-- Abstraction for integrating various LLM providers
+### 1. Basic: Register and Run a Simple Agentusing AIOMux.Core;
+using AIOMux.Core.Interfaces;
 
-## Features
-- Agent plugin system for extensibility
-- Chainable agent workflows
-- LLM-powered code/documentation review
-- Resume review tool (PDF/text)
-- XML documentation standards
-- .NET 8 compatible
+public class EchoAgent : IAgent
+{
+    public string Name => "EchoAgent";
+    public Task<string> ExecuteAsync(AgentContext context)
+        => Task.FromResult($"Echo: {context.UserInput}");
+}
 
-## Architecture
-- **AIOMux.Core**: Handles agent registration, chaining, context, and plugin loading.
-- **AIOMux.LLM**: Provides LLM client implementations and abstractions for agent interaction.
+var manager = new AgentManager();
+manager.Register(new EchoAgent());
+var agent = manager.GetByName("EchoAgent");
+if (agent != null)
+{
+    var context = new AgentContext { UserInput = "Hello!" };
+    var result = await agent.ExecuteAsync(context);
+    Console.WriteLine(result);
+}
 
-## Getting Started
+### 2. Implementing a Tool (ITool)using AIOMux.Core.Interfaces;
+public class UppercaseTool : ITool
+{
+    public string Name => "Uppercase";
+    public Task<string> ExecuteAsync(string input)
+        => Task.FromResult(input.ToUpperInvariant());
+}
 
-### Prerequisites
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+### 3. Implementing an Agent Plugin (IAgentPlugin)using AIOMux.Core.Interfaces;
+public class MyPlugin : IAgentPlugin
+{
+    public AgentMetadata Metadata => new() { Name = "MyPluginAgent", Description = "A sample plugin agent." };
+    public IAgent CreateAgent(ILLMClient? llmClient = null, Dictionary<string, object>? configuration = null)
+        => new MyPluginAgent();
+    public Task<bool> InitializeAsync(Dictionary<string, object>? configuration = null) => Task.FromResult(true);
+    public Task DisposeAsync() => Task.CompletedTask;
+}
 
-### Build & Run
-```sh
-dotnet build
-```
+public class MyPluginAgent : IAgent
+{
+    public string Name => "MyPluginAgent";
+    public Task<string> ExecuteAsync(AgentContext context)
+        => Task.FromResult("Plugin agent executed!");
+}
 
-```
+### 4. Intermediate: Using OllamaClient from AIOMux.LLMusing AIOMux.LLM;
+var llm = new OllamaClient(model: "llama3");
+string response = await llm.GenerateAsync("What is the capital of France?");
+Console.WriteLine(response);
 
-## Extending
-- Implement `IAgent`, `IAgentPlugin`, or `ITool` for new agents/tools
-- Add LLM clients by implementing `ILLMClient`
-- Use `AgentManager` to register and load plugins
+### 5. Advanced: Create and Run an Agent Chain
+// Assume you have two agents: agentA and agentB
+manager.Register(agentA);
+manager.Register(agentB);
+var chain = manager.CreateChain("MyChain");
+chain.AddAgent(agentA).AddAgent(agentB);
+var context = new AgentContext { UserInput = "Start chain" };
+var result = await chain.ExecuteAsync(context);
+Console.WriteLine(result);
 
-## Contributing
-Pull requests and issues are welcome! Please follow standard .NET coding and documentation conventions.
+### 6. Advanced: Load Agent Plugins Dynamically
+var manager = new AgentManager();
+bool loaded = await manager.LoadPluginAsync("./plugins/AIOMux.Plugin.MyPlugin.dll");
+if (loaded)
+{
+    var pluginAgent = manager.GetByName("MyPluginAgent");
+    if (pluginAgent != null)
+    {
+        var context = new AgentContext { UserInput = "Run plugin agent" };
+        var result = await pluginAgent.ExecuteAsync(context);
+        Console.WriteLine(result);
+    }
+}
+See also: [AIOMux.LLM](../AIOMux.LLM/) for LLM client implementations.
+
+More examples soon...
 
 ## License
-MIT
-
----
-For more details, see the source code and XML documentation comments throughout the projects.
+This project is licensed under the MIT License. See [LICENSE](../LICENSE) for details.
