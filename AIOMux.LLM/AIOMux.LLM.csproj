@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Title>AIOMux LLM</Title>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Adrian Cantu</Authors>
     <Company>AIOMux</Company>
     <Product>AIOMux LLM</Product>
@@ -13,9 +13,16 @@
     <PackageProjectUrl>aiomux.io</PackageProjectUrl>
     <RepositoryUrl>https://github.com/aiomux/AIOMux/</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>AI;Artificial-Intelligence;Agent;Agents;Orchestration;LLM;Large-Language-Model;Plugin;Tools;AI-Orchestration;Agent-Framework;C#;.NET;.NetCore;</PackageTags>
+    <PackageReleaseNotes>Minor updates.</PackageReleaseNotes>
+    <PackageIcon>aiomux_1.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\..\..\..\OneDrive\Pictures\Icon\aiomux_1.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
     <None Include="..\AIOMux.Core\README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>

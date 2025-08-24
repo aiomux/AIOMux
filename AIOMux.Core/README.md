@@ -13,8 +13,9 @@ AIOMux.Core is a modern, extensible .NET library for building, orchestrating, an
 ## Examples
 
 ### 1. Basic: Register and Run a Simple Agentusing AIOMux.Core;
-using AIOMux.Core.Interfaces;
-```
+
+```using AIOMux.Core.Interfaces;
+
 public class EchoAgent : IAgent
 {
     public string Name => "EchoAgent";
@@ -32,8 +33,9 @@ if (agent != null)
     Console.WriteLine(result);
 }
 ```
-### 2. Implementing a Tool (ITool)using AIOMux.Core.Interfaces;
+### 2. Implementing a Tool (ITool)
 ```
+using AIOMux.Core.Interfaces;
 public class UppercaseTool : ITool
 {
     public string Name => "Uppercase";
@@ -41,8 +43,9 @@ public class UppercaseTool : ITool
         => Task.FromResult(input.ToUpperInvariant());
 }
 ```
-### 3. Implementing an Agent Plugin (IAgentPlugin)using AIOMux.Core.Interfaces;
+### 3. Implementing an Agent Plugin (IAgentPlugin)
 ```
+using AIOMux.Core.Interfaces;
 public class MyPlugin : IAgentPlugin
 {
     public AgentMetadata Metadata => new() { Name = "MyPluginAgent", Description = "A sample plugin agent." };
@@ -59,8 +62,9 @@ public class MyPluginAgent : IAgent
         => Task.FromResult("Plugin agent executed!");
 }
 ```
-### 4. Intermediate: Using OllamaClient from AIOMux.LLMusing AIOMux.LLM;
+### 4. Intermediate: Using OllamaClient from AIOMux.LLM
 ```
+using AIOMux.LLM;
 var llm = new OllamaClient(model: "llama3");
 string response = await llm.GenerateAsync("What is the capital of France?");
 Console.WriteLine(response);
