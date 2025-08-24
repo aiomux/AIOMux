@@ -19,11 +19,11 @@
 		<PackAsTool>False</PackAsTool>
 		<PackageTags>AI;Artificial-Intelligence;Agent;Agents;Orchestration;LLM;Large-Language-Model;Plugin;Tools;AI-Orchestration;Agent-Framework;C#;.NET;.NetCore;</PackageTags>
 		<PackageReleaseNotes>minor updates</PackageReleaseNotes>
-		<PackageIcon>aiomux_1.png</PackageIcon>
+		<PackageIcon>aiomux_1.JPG</PackageIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <None Include="..\..\..\..\OneDrive\Pictures\Icon\aiomux_1.png">
+	  <None Include="..\..\..\..\OneDrive\Pictures\Icon\aiomux_1.JPG">
 	    <Pack>True</Pack>
 	    <PackagePath>\</PackagePath>
 	  </None>

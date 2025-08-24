@@ -12,9 +12,11 @@ AIOMux.Core is a modern, extensible .NET library for building, orchestrating, an
 
 ## Examples
 
-### 1. Basic: Register and Run a Simple Agentusing AIOMux.Core;
+### 1. Basic: Register and Run a Simple Agent
 
-```using AIOMux.Core.Interfaces;
+```
+using AIOMux.Core;
+using AIOMux.Core.Interfaces;
 
 public class EchoAgent : IAgent
 {
@@ -68,8 +70,10 @@ using AIOMux.LLM;
 var llm = new OllamaClient(model: "llama3");
 string response = await llm.GenerateAsync("What is the capital of France?");
 Console.WriteLine(response);
+```
 
 ### 5. Advanced: Create and Run an Agent Chain
+```
 // Assume you have two agents: agentA and agentB
 manager.Register(agentA);
 manager.Register(agentB);
