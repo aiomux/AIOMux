@@ -2,7 +2,7 @@
 using AIOMux.Core.Interfaces;
 using System.Net.Http.Json;
 
-namespace AIOMux.LLM;
+namespace AIOMux.Clients;
 
 /// <summary>
 /// Client for interacting with the Ollama LLM API.

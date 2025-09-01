@@ -5,13 +5,13 @@ VisualStudioVersion = 17.14.36121.58
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Core", "AIOMux.Core\AIOMux.Core.csproj", "{CC231BE5-A970-469B-9837-4562A7189A1F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.LLM", "AIOMux.LLM\AIOMux.LLM.csproj", "{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Basic Chat Prompt", "Basic Chat Prompt", "{A5B1C4A9-EBDA-4E4C-AFA9-977E4BF7A860}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BasicChatPrompt", "Examples\BasicChatPrompt\BasicChatPrompt.csproj", "{19F8B149-4C41-0DD5-3133-E10421BF842D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Clients", "AIOMux.Clients\AIOMux.Clients.csproj", "{832840A9-06B8-92CB-3DF9-5F09FE906408}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,14 +23,14 @@ Global
 		{CC231BE5-A970-469B-9837-4562A7189A1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CC231BE5-A970-469B-9837-4562A7189A1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CC231BE5-A970-469B-9837-4562A7189A1F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CD0BA697-B0A6-6243-6C68-E8CB35D1E48F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{19F8B149-4C41-0DD5-3133-E10421BF842D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{19F8B149-4C41-0DD5-3133-E10421BF842D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{19F8B149-4C41-0DD5-3133-E10421BF842D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{19F8B149-4C41-0DD5-3133-E10421BF842D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{832840A9-06B8-92CB-3DF9-5F09FE906408}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{832840A9-06B8-92CB-3DF9-5F09FE906408}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{832840A9-06B8-92CB-3DF9-5F09FE906408}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{832840A9-06B8-92CB-3DF9-5F09FE906408}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

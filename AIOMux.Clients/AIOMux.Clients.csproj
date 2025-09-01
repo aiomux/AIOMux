@@ -4,12 +4,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Title>AIOMux LLM</Title>
-    <Version>0.3.0</Version>
+    <Title>AIOMux Clients</Title>
+    <Version>0.4.0</Version>
     <Authors>Adrian Cantu</Authors>
     <Company>AIOMux</Company>
-    <Product>AIOMux LLM</Product>
-    <Description>Provides LLM client implementations and abstractions for agent interaction.</Description>
+    <Product>AIOMux Clients</Product>
+    <Description>Provides Language Model client implementations and abstractions for agent interaction. AIOMux.LLM is deprecated</Description>
     <PackageProjectUrl>aiomux.io</PackageProjectUrl>
     <RepositoryUrl>https://github.com/aiomux/AIOMux/</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -19,10 +19,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\..\..\OneDrive\Pictures\Icon\aiomux_1.JPG">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
     <None Include="..\AIOMux.Core\README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
@@ -31,6 +27,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="aiomux_1.JPG">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>

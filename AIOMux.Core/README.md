@@ -64,9 +64,9 @@ public class MyPluginAgent : IAgent
         => Task.FromResult("Plugin agent executed!");
 }
 ```
-### 4. Intermediate: Using OllamaClient from AIOMux.LLM
+### 4. Intermediate: Using OllamaClient from AIOMux.Clients
 ```
-using AIOMux.LLM;
+using AIOMux.Clients;
 var llm = new OllamaClient(model: "llama3");
 string response = await llm.GenerateAsync("What is the capital of France?");
 Console.WriteLine(response);
@@ -98,7 +98,7 @@ if (loaded)
     }
 }
 ```
-See also: [AIOMux.LLM](../AIOMux.LLM/) for LLM client implementations.
+See also: [AIOMux.Clients](../AIOMux.Clients/) for LLM client implementations.
 
 More examples soon...
 
