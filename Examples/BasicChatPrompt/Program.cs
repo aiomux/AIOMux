@@ -1,4 +1,4 @@
-﻿using AIOMux.LLM;
+﻿using AIOMux.Clients;
 
 namespace BasicChatPrompt
 {
@@ -8,7 +8,7 @@ namespace BasicChatPrompt
         static async Task Main(string[] args)
         {
             // Create an instance of the Ollama LLM client with the specified model
-            var llm = new OllamaClient(model: "llama3.1");
+            var llm = new OllamaClient(model: "llama3");
 
             // Main chat loop: keep accepting user input until 'exit' is typed
             while (true)
