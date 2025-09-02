@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Title>AIOMux Clients</Title>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Authors>Adrian Cantu</Authors>
     <Company>AIOMux</Company>
     <Product>AIOMux Clients</Product>
@@ -19,18 +19,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\AIOMux.Core\README.md">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
+    <PackageReference Include="AIOMux.Core" Version="0.3.0" />
   </ItemGroup>
 
   <ItemGroup>
     <None Update="aiomux_1.JPG">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Update="README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
