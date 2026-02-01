@@ -48,7 +48,7 @@ public class RunCommand
             var trimmed = input.Trim();
 
             // Handle built-in commands
-            if (trimmed.Equals("exit", StringComparison.OrdinalIgnoreCase) || 
+            if (trimmed.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.Equals("quit", StringComparison.OrdinalIgnoreCase))
             {
                 Console.WriteLine("?? Goodbye!");

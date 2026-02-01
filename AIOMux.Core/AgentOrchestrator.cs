@@ -250,7 +250,7 @@ public class AgentOrchestrator
     public async Task<string> ExecuteChainAsync(AgentChainModel chainModel, AgentContext context, bool generateSummary)
     {
         var result = await ExecuteChainResultAsync(chainModel, context);
-        
+
         if (!result.Success)
         {
             return result.Error ?? "Chain execution failed";

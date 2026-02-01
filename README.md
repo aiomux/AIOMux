@@ -10,6 +10,27 @@ AIOMux.Core is a modern, extensible .NET library for building, orchestrating, an
 - **Configuration & validation:** Strongly-typed, extensible config
 - **Metrics & memory:** Built-in support for agent metrics and memory stores
 
+## Quick Start (Local)
+
+Get up and running with AIOMux locally in seconds:
+
+```bash
+# Initialize a new workspace
+dotnet run --project src/AIOMux.Local -- init
+
+# Start the interactive REPL
+dotnet run --project src/AIOMux.Local -- run
+```
+
+The `init` command creates:
+- `aiomux.json` - Configuration file
+- `skills/` - Directory for agent plugins
+- `sandbox/` - Sandbox directory for execution
+
+You can then add agent plugins to the `skills/` directory and run them through the local REPL.
+
+For more details, see [AIOMux.Local](./src/AIOMux.Local/).
+
 ## Examples
 
 ### 1. Basic: Register and Run a Simple Agentusing AIOMux.Core;

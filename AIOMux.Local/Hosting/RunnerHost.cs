@@ -1,9 +1,7 @@
 using AIOMux.Core;
-using AIOMux.Core.Interfaces;
 using AIOMux.Local.Config;
 using AIOMux.Local.Security;
 using AIOMux.Local.Skills;
-using Microsoft.Extensions.Logging;
 
 namespace AIOMux.Local.Hosting;
 
@@ -36,10 +34,10 @@ public class RunnerHost
     public async Task InitializeAsync()
     {
         Console.WriteLine("?? Initializing AIOMux runtime...");
-        
+
         // Load plugins/skills from the skills directory
         await LoadSkillsAsync();
-        
+
         if (_agentManager.GetAllAgents().Count == 0)
         {
             Console.WriteLine("??  No agents loaded. Add skill plugins to the skills directory.");
@@ -54,7 +52,7 @@ public class RunnerHost
     private async Task LoadSkillsAsync()
     {
         var pluginPaths = _skillLoader.DiscoverPlugins().ToList();
-        
+
         if (pluginPaths.Count == 0)
         {
             Console.WriteLine("??  No plugins found in skills directory (this is okay for MVP)");
@@ -62,7 +60,7 @@ public class RunnerHost
         }
 
         Console.WriteLine($"?? Loading {pluginPaths.Count} plugin(s)...");
-        
+
         int loadedCount = 0;
         foreach (var pluginPath in pluginPaths)
         {
@@ -97,7 +95,7 @@ public class RunnerHost
         Console.WriteLine("        AIOMux Local Runtime");
         Console.WriteLine("???????????????????????????????????????????");
         Console.WriteLine();
-        
+
         var agents = _agentManager.GetAllAgents();
         Console.WriteLine($"?? Loaded Agents: {agents.Count}");
         if (agents.Count > 0)
@@ -132,7 +130,7 @@ public class RunnerHost
         try
         {
             var agent = _agentManager.GetByName(_config.DefaultAgentName);
-            
+
             if (agent == null)
             {
                 return $"Error: Agent '{_config.DefaultAgentName}' not found.";
