@@ -25,12 +25,13 @@ public class AgentOrchestrator
     }
 
     /// <summary>
-    /// Executes a chain of agents and returns structured result information.
+    /// Executes a chain of agents and returns structured result information with cancellation support.
     /// </summary>
     /// <param name="chainModel">The chain model to execute.</param>
     /// <param name="context">The context for execution.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>Structured result with success status, output, and optional error details.</returns>
-    public async Task<ChainRunResult> ExecuteChainResultAsync(AgentChainModel chainModel, AgentContext context)
+    public async Task<ChainRunResult> ExecuteChainResultAsync(AgentChainModel chainModel, AgentContext context, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -47,6 +48,12 @@ public class AgentOrchestrator
                 var errorMessage = "Context cannot be null";
                 _logger.LogError(errorMessage);
                 return new ChainRunResult(false, string.Empty, errorMessage);
+            }
+
+            // Preserve original user input for replay friendliness
+            if (!context.Variables.ContainsKey("user.input.original"))
+            {
+                context.Variables["user.input.original"] = context.UserInput;
             }
 
             // Validate chain model
@@ -86,6 +93,8 @@ public class AgentOrchestrator
             // Execute each step in the chain
             for (int i = 0; i < chainModel.Steps.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var step = chainModel.Steps[i];
                 var agent = _agentManager.GetByName(step.AgentName)!; // Safe due to validation above
 
@@ -98,7 +107,34 @@ public class AgentOrchestrator
                     SetStepInput(step, context);
 
                     // Execute the agent with or without metrics
-                    if (context.Options.CollectMetrics)
+                    // Check if agent supports cancellation
+                    if (agent is ICancellableAgent cancellableAgent)
+                    {
+                        if (context.Options.CollectMetrics)
+                        {
+                            var startTime_step = DateTime.UtcNow;
+                            var stepResult = await cancellableAgent.ExecuteAsync(context, cancellationToken);
+                            var endTime_step = DateTime.UtcNow;
+                            result = stepResult;
+
+                            var metrics = new AgentMetrics
+                            {
+                                AgentName = step.AgentName,
+                                ExecutionTimeMs = (endTime_step - startTime_step).TotalMilliseconds,
+                                StartTime = startTime_step,
+                                EndTime = endTime_step
+                            };
+
+                            allMetrics.Add(metrics);
+                            _logger.LogDebug("Agent {AgentName} completed in {ExecutionTime}ms",
+                                step.AgentName, metrics.ExecutionTimeMs);
+                        }
+                        else
+                        {
+                            result = await cancellableAgent.ExecuteAsync(context, cancellationToken);
+                        }
+                    }
+                    else if (context.Options.CollectMetrics)
                     {
                         var (stepResult, metrics) = await agent.ExecuteWithMetricsAsync(context);
                         result = stepResult;
@@ -121,6 +157,13 @@ public class AgentOrchestrator
 
                     _logger.LogDebug("Agent {AgentName} completed successfully, output stored as {OutputKey}",
                         step.AgentName, outputKey);
+                }
+                catch (OperationCanceledException)
+                {
+                    var errorMessage = $"Execution cancelled at step {i + 1} ({step.AgentName})";
+                    _logger.LogWarning("Chain execution cancelled at step {StepNumber}: {AgentName}",
+                        i + 1, step.AgentName);
+                    return new ChainRunResult(false, result, errorMessage, i, step.AgentName);
                 }
                 catch (Exception ex)
                 {
@@ -161,12 +204,29 @@ public class AgentOrchestrator
 
             return new ChainRunResult(true, result);
         }
+        catch (OperationCanceledException)
+        {
+            var errorMessage = "Chain execution cancelled";
+            _logger.LogWarning("Chain execution cancelled");
+            return new ChainRunResult(false, string.Empty, errorMessage);
+        }
         catch (Exception ex)
         {
             var errorMessage = $"Unexpected error during chain execution: {ex.Message}";
             _logger.LogError(ex, "Unexpected error during chain execution: {Error}", errorMessage);
             return new ChainRunResult(false, string.Empty, errorMessage);
         }
+    }
+
+    /// <summary>
+    /// Executes a chain of agents and returns structured result information.
+    /// </summary>
+    /// <param name="chainModel">The chain model to execute.</param>
+    /// <param name="context">The context for execution.</param>
+    /// <returns>Structured result with success status, output, and optional error details.</returns>
+    public Task<ChainRunResult> ExecuteChainResultAsync(AgentChainModel chainModel, AgentContext context)
+    {
+        return ExecuteChainResultAsync(chainModel, context, CancellationToken.None);
     }
 
     /// <summary>
