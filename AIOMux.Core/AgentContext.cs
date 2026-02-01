@@ -1,4 +1,5 @@
 ﻿using AIOMux.Core.Interfaces;
+using AIOMux.Core.Memory;
 using AIOMux.Core.Models;
 
 namespace AIOMux.Core;
@@ -21,7 +22,7 @@ public class AgentContext
     /// <summary>
     /// Gets the variables available in the agent context.
     /// </summary>
-    public Dictionary<string, object> Variables { get; } = new();
+    public Dictionary<string, object> Variables { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets or sets the options controlling agent execution behavior.
@@ -31,12 +32,12 @@ public class AgentContext
     /// <summary>
     /// Gets or sets the dictionary of tools available to agents during execution.
     /// </summary>
-    public Dictionary<string, ITool> Tools { get; set; } = new();
+    public Dictionary<string, ITool> Tools { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets or sets the memory store for persisting data between agent executions.
     /// </summary>
-    public IMemoryStore Memory { get; set; } = new Memory.InMemoryStore();
+    public IMemoryStore Memory { get; set; } = new NullMemoryStore();
 
     /// <summary>
     /// Gets or sets the agent manager for accessing available agents.

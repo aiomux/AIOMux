@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Title>AIOMux Local</Title>
+    <Version>0.1.0</Version>
+    <Authors>Adrian Cantu</Authors>
+    <Company>AIOMux</Company>
+    <Product>AIOMux Local</Product>
+    <Description>Local orchestration and workspace initialization for AIOMux agents.</Description>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AIOMux.Clients\AIOMux.Clients.csproj" />
+    <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
+  </ItemGroup>
+
+</Project>

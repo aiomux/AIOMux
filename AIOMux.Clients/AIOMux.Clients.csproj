@@ -15,7 +15,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>AI;Artificial-Intelligence;Agent;Agents;Orchestration;LLM;Large-Language-Model;Plugin;Tools;AI-Orchestration;Agent-Framework;C#;.NET;.NetCore;</PackageTags>
     <PackageReleaseNotes>Minor updates.</PackageReleaseNotes>
-    <PackageIcon>aiomux_1.JPG</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,10 +22,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="aiomux_1.JPG">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
     <None Update="README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>

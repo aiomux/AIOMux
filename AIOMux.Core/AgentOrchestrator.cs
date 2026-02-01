@@ -1,3 +1,4 @@
+using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,7 +10,7 @@ namespace AIOMux.Core;
 /// </summary>
 public class AgentOrchestrator
 {
-    private readonly AgentManager _agentManager;
+    private readonly IAgentManager _agentManager;
     private readonly ILogger<AgentOrchestrator> _logger;
 
     /// <summary>
@@ -17,64 +18,52 @@ public class AgentOrchestrator
     /// </summary>
     /// <param name="agentManager">The agent manager to use for managing agents.</param>
     /// <param name="logger">The logger to use for logging operations.</param>
-    public AgentOrchestrator(AgentManager agentManager, ILogger<AgentOrchestrator>? logger = null)
+    public AgentOrchestrator(IAgentManager agentManager, ILogger<AgentOrchestrator>? logger = null)
     {
         _agentManager = agentManager ?? throw new ArgumentNullException(nameof(agentManager));
         _logger = logger ?? NullLogger<AgentOrchestrator>.Instance;
     }
 
     /// <summary>
-    /// Executes a chain of agents with the given context.
+    /// Executes a chain of agents and returns structured result information.
     /// </summary>
     /// <param name="chainModel">The chain model to execute.</param>
     /// <param name="context">The context for execution.</param>
-    /// <returns>The final output from chain execution.</returns>
-    public Task<string> ExecuteChainAsync(AgentChainModel chainModel, AgentContext context)
+    /// <returns>Structured result with success status, output, and optional error details.</returns>
+    public async Task<ChainRunResult> ExecuteChainResultAsync(AgentChainModel chainModel, AgentContext context)
     {
-        return ExecuteChainAsync(chainModel, context, true);
-    }
-
-    /// <summary>
-    /// Executes a chain of agents with the given context and optional metrics collection.
-    /// </summary>
-    /// <param name="chainModel">The chain model to execute.</param>
-    /// <param name="context">The context for execution.</param>
-    /// <param name="generateSummary">Whether to generate a job summary.</param>
-    /// <returns>The final output from chain execution or job summary based on parameters.</returns>
-    public async Task<string> ExecuteChainAsync(AgentChainModel chainModel, AgentContext context, bool generateSummary)
-    {
-        // Validate inputs
-        if (chainModel == null)
-        {
-            var errorMessage = "Chain model cannot be null";
-            _logger.LogError(errorMessage);
-            throw new ArgumentNullException(nameof(chainModel));
-        }
-
-        if (context == null)
-        {
-            var errorMessage = "Context cannot be null";
-            _logger.LogError(errorMessage);
-            throw new ArgumentNullException(nameof(context));
-        }
-
-        // Validate chain model
-        if (!chainModel.Validate(out var errors))
-        {
-            var errorMessage = $"Chain validation failed: {string.Join(", ", errors)}";
-            _logger.LogError("Chain validation failed for '{ChainName}': {Errors}", chainModel.Name, string.Join(", ", errors));
-            return errorMessage;
-        }
-
-        _logger.LogInformation("Starting execution of agent chain: {ChainName} with {StepCount} steps",
-            chainModel.Name, chainModel.Steps.Count);
-
-        var startTime = DateTime.UtcNow;
-        var allMetrics = new List<AgentMetrics>();
-        string result = string.Empty;
-
         try
         {
+            // Validate inputs
+            if (chainModel == null)
+            {
+                var errorMessage = "Chain model cannot be null";
+                _logger.LogError(errorMessage);
+                return new ChainRunResult(false, string.Empty, errorMessage);
+            }
+
+            if (context == null)
+            {
+                var errorMessage = "Context cannot be null";
+                _logger.LogError(errorMessage);
+                return new ChainRunResult(false, string.Empty, errorMessage);
+            }
+
+            // Validate chain model
+            if (!chainModel.Validate(out var errors))
+            {
+                var errorMessage = $"Chain validation failed: {string.Join(", ", errors)}";
+                _logger.LogError("Chain validation failed for '{ChainName}': {Errors}", chainModel.Name, errorMessage);
+                return new ChainRunResult(false, string.Empty, errorMessage);
+            }
+
+            _logger.LogInformation("Starting execution of agent chain: {ChainName} with {StepCount} steps",
+                chainModel.Name, chainModel.Steps.Count);
+
+            var startTime = DateTime.UtcNow;
+            var allMetrics = new List<AgentMetrics>();
+            string result = string.Empty;
+
             // Validate all agents exist before execution
             var missingAgents = new List<string>();
             foreach (var step in chainModel.Steps)
@@ -90,8 +79,8 @@ public class AgentOrchestrator
             {
                 var errorMessage = $"Agents not found: {string.Join(", ", missingAgents)}";
                 _logger.LogError("Missing agents in chain '{ChainName}': {MissingAgents}",
-                    chainModel.Name, string.Join(", ", missingAgents));
-                return errorMessage;
+                    chainModel.Name, errorMessage);
+                return new ChainRunResult(false, string.Empty, errorMessage);
             }
 
             // Execute each step in the chain
@@ -106,7 +95,7 @@ public class AgentOrchestrator
                         i + 1, chainModel.Steps.Count, step.AgentName);
 
                     // Set the input for this step if specified
-                    await SetStepInputAsync(step, context);
+                    SetStepInput(step, context);
 
                     // Execute the agent with or without metrics
                     if (context.Options.CollectMetrics)
@@ -138,7 +127,7 @@ public class AgentOrchestrator
                     var errorMessage = $"Error executing agent {step.AgentName} in step {i + 1}: {ex.Message}";
                     _logger.LogError(ex, "Error executing agent {AgentName} in step {StepNumber}: {Error}",
                         step.AgentName, i + 1, ex.Message);
-                    return errorMessage;
+                    return new ChainRunResult(false, result, errorMessage, i, step.AgentName);
                 }
             }
 
@@ -163,23 +152,51 @@ public class AgentOrchestrator
 
                 context.Variables["JobSummary"] = jobSummary;
 
-                // Return summary if requested
-                if (generateSummary && context.Options.GenerateJobSummary)
+                if (context.Options.GenerateJobSummary)
                 {
                     var summaryReport = jobSummary.CreateReport(context.Options.IncludeDetailedMetrics);
-                    return $"{result}\n\n{summaryReport}";
+                    result = $"{result}\n\n{summaryReport}";
                 }
             }
 
-            return result;
+            return new ChainRunResult(true, result);
         }
         catch (Exception ex)
         {
             var errorMessage = $"Unexpected error during chain execution: {ex.Message}";
-            _logger.LogError(ex, "Unexpected error during chain execution for '{ChainName}': {Error}",
-                chainModel.Name, ex.Message);
-            return errorMessage;
+            _logger.LogError(ex, "Unexpected error during chain execution: {Error}", errorMessage);
+            return new ChainRunResult(false, string.Empty, errorMessage);
         }
+    }
+
+    /// <summary>
+    /// Executes a chain of agents with the given context.
+    /// </summary>
+    /// <param name="chainModel">The chain model to execute.</param>
+    /// <param name="context">The context for execution.</param>
+    /// <returns>The final output from chain execution.</returns>
+    public Task<string> ExecuteChainAsync(AgentChainModel chainModel, AgentContext context)
+    {
+        return ExecuteChainAsync(chainModel, context, true);
+    }
+
+    /// <summary>
+    /// Executes a chain of agents with the given context and optional metrics collection.
+    /// </summary>
+    /// <param name="chainModel">The chain model to execute.</param>
+    /// <param name="context">The context for execution.</param>
+    /// <param name="generateSummary">Whether to generate a job summary.</param>
+    /// <returns>The final output from chain execution or job summary based on parameters.</returns>
+    public async Task<string> ExecuteChainAsync(AgentChainModel chainModel, AgentContext context, bool generateSummary)
+    {
+        var result = await ExecuteChainResultAsync(chainModel, context);
+        
+        if (!result.Success)
+        {
+            return result.Error ?? "Chain execution failed";
+        }
+
+        return result.Output;
     }
 
     /// <summary>
@@ -187,7 +204,7 @@ public class AgentOrchestrator
     /// </summary>
     /// <param name="step">The agent step to set input for.</param>
     /// <param name="context">The context containing variables and user input.</param>
-    private async Task SetStepInputAsync(AgentStep step, AgentContext context)
+    private void SetStepInput(AgentStep step, AgentContext context)
     {
         if (string.IsNullOrEmpty(step.InputFrom))
         {

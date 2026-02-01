@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36121.58
+# Visual Studio Version 18
+VisualStudioVersion = 18.2.11415.280 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Core", "AIOMux.Core\AIOMux.Core.csproj", "{CC231BE5-A970-469B-9837-4562A7189A1F}"
 EndProject
@@ -12,6 +12,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Clients", "AIOMux.Clients\AIOMux.Clients.csproj", "{832840A9-06B8-92CB-3DF9-5F09FE906408}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BasicChatPrompt", "BasicChatPrompt\BasicChatPrompt.csproj", "{17B77950-4D39-45E0-A06B-102E8AD4DFCE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Local", "AIOMux.Local\AIOMux.Local.csproj", "{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,6 +33,10 @@ Global
 		{17B77950-4D39-45E0-A06B-102E8AD4DFCE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{17B77950-4D39-45E0-A06B-102E8AD4DFCE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{17B77950-4D39-45E0-A06B-102E8AD4DFCE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
