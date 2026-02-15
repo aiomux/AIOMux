@@ -19,7 +19,19 @@ public class ToolDispatcher
 
     public async Task<ToolResult> InvokeAsync(ToolCall call, AgentContext context, CancellationToken ct = default)
     {
-        // Policy evaluation
+        // 1. ToolProposed event
+        await _eventSink.RecordAsync(
+            new Replay.Models.ToolProposedEvent
+            {
+                Payload = new Replay.Models.ToolProposedEvent.ToolProposedPayload
+                {
+                    CallId = call.CallId,
+                    ToolName = call.ToolName,
+                    JsonArgs = call.JsonArgs
+                }
+            }, ct);
+
+        // 2. Policy evaluation
         var policyDecision = _policyEngine.Evaluate(call, context);
         await _eventSink.RecordAsync(
             new Replay.Models.PolicyEvaluatedEvent
@@ -51,20 +63,75 @@ public class ToolDispatcher
             return deniedResult;
         }
 
-        // Existing tool execution logic (placeholder, to be replaced with actual logic)
-        // ...
-        // For demonstration, return a successful result
-        var result = new ToolResult
+        // 3. Check replay mode
+        ToolResult result;
+        bool fromReplay = false;
+
+        if ((context.ReplayMode == ReplayMode.Full || context.ReplayMode == ReplayMode.ToolsOnly)
+            && context.ReplaySource != null
+            && context.ReplaySource.TryGetToolResult(call.CallId, out var replayedResult))
         {
-            CallId = call.CallId,
-            Success = true,
-            JsonResult = "{}"
-        };
+            // Use recorded result from replay
+            result = replayedResult;
+            fromReplay = true;
+        }
+        else
+        {
+            // Execute tool normally
+            if (!context.Tools.TryGetValue(call.ToolName, out var tool))
+            {
+                result = new ToolResult
+                {
+                    CallId = call.CallId,
+                    Success = false,
+                    Error = $"Tool not found: {call.ToolName}",
+                    JsonResult = string.Empty
+                };
+            }
+            else
+            {
+                try
+                {
+                    var output = await tool.ExecuteAsync(call.JsonArgs);
+                    result = new ToolResult
+                    {
+                        CallId = call.CallId,
+                        Success = true,
+                        JsonResult = output
+                    };
+                }
+                catch (Exception ex)
+                {
+                    result = new ToolResult
+                    {
+                        CallId = call.CallId,
+                        Success = false,
+                        Error = ex.Message,
+                        JsonResult = string.Empty
+                    };
+                }
+            }
+        }
+
+        // 4. ToolExecuted event
+        await _eventSink.RecordAsync(
+            new Replay.Models.ToolExecutedEvent
+            {
+                Payload = new Replay.Models.ToolExecutedEvent.ToolExecutedPayload
+                {
+                    CallId = call.CallId,
+                    ToolName = call.ToolName,
+                    FromReplay = fromReplay
+                }
+            }, ct);
+
+        // 5. ToolResult event
         await _eventSink.RecordAsync(
             new Replay.Models.ToolResultEvent
             {
                 Result = result
             }, ct);
+
         return result;
     }
 }

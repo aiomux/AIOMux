@@ -1,6 +1,7 @@
 ﻿using AIOMux.Core.Interfaces;
 using AIOMux.Core.Memory;
 using AIOMux.Core.Models;
+using AIOMux.Core.Replay;
 
 namespace AIOMux.Core;
 
@@ -44,6 +45,17 @@ public class AgentContext
     /// Gets or sets the agent manager for accessing available agents.
     /// </summary>
     public IAgentManager? AgentManager { get; set; }
+
+    /// <summary>
+    /// Gets or sets the replay mode for tool execution.
+    /// </summary>
+    public ReplayMode ReplayMode { get; set; } = ReplayMode.None;
+
+    /// <summary>
+    /// Gets or sets the replay source for retrieving recorded tool results.
+    /// </summary>
+    public IReplaySource? ReplaySource { get; set; }
+
     /// <summary>
     /// Executes a tool by name, resolving from Tools.
     /// </summary>
