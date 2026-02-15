@@ -34,6 +34,7 @@ public class AgentContext
     /// </summary>
     public Dictionary<string, ITool> Tools { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+
     /// <summary>
     /// Gets or sets the memory store for persisting data between agent executions.
     /// </summary>
@@ -43,4 +44,32 @@ public class AgentContext
     /// Gets or sets the agent manager for accessing available agents.
     /// </summary>
     public IAgentManager? AgentManager { get; set; }
+    /// <summary>
+    /// Executes a tool by name, resolving from Tools.
+    /// </summary>
+    public async Task<ToolResult> ExecuteToolAsync(string toolName, string jsonArgs, CancellationToken ct = default)
+    {
+        if (!Tools.TryGetValue(toolName, out var tool))
+        {
+            return new ToolResult
+            {
+                CallId = Guid.NewGuid().ToString(),
+                JsonResult = string.Empty,
+                Success = false,
+                Error = $"Tool not found: {toolName}"
+            };
+        }
+        var call = new ToolCall
+        {
+            ToolName = toolName,
+            JsonArgs = jsonArgs
+        };
+        var output = await tool.ExecuteAsync(jsonArgs);
+        return new ToolResult
+        {
+            CallId = call.CallId,
+            JsonResult = output,
+            Success = true
+        };
+    }
 }

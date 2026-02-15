@@ -78,7 +78,7 @@ public class AgentChain : IAgent
         foreach (var agent in _chain)
         {
             // Execute current agent
-            lastResult = await agent.ExecuteAsync(context);
+            lastResult = await ToolExecution.RunAsync(agent, context);
 
             // Store result in context for next agent
             context.Variables[agent.Name] = lastResult;
@@ -98,7 +98,7 @@ public class AgentChain : IAgent
         foreach (var agent in _chain)
         {
             // Execute agent with metrics collection
-            var (result, metrics) = await agent.ExecuteWithMetricsAsync(context, context.Options.CollectMetrics);
+            var (result, metrics) = await ToolExecution.RunWithMetricsAsync(agent, context);
 
             // Store result in context
             lastResult = result;
