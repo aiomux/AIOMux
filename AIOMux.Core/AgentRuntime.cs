@@ -14,6 +14,7 @@ public class AgentRuntime : IAgentRuntime
     private readonly IAgentManager _agentManager;
     private readonly AgentOrchestrator _orchestrator;
     private readonly ILogger<AgentRuntime> _logger;
+    private readonly Replay.IRuntimeEventSink? _eventSink;
 
     /// <summary>
     /// Creates a new instance of the agent runtime facade.
@@ -21,11 +22,12 @@ public class AgentRuntime : IAgentRuntime
     /// <param name="agentManager">The agent manager for agent/chain lookup.</param>
     /// <param name="orchestrator">The orchestrator for chain execution.</param>
     /// <param name="logger">Optional logger for runtime operations.</param>
-    public AgentRuntime(IAgentManager agentManager, AgentOrchestrator orchestrator, ILogger<AgentRuntime>? logger = null)
+    public AgentRuntime(IAgentManager agentManager, AgentOrchestrator orchestrator, ILogger<AgentRuntime>? logger = null, Replay.IRuntimeEventSink? eventSink = null)
     {
         _agentManager = agentManager ?? throw new ArgumentNullException(nameof(agentManager));
         _orchestrator = orchestrator ?? throw new ArgumentNullException(nameof(orchestrator));
         _logger = logger ?? NullLogger<AgentRuntime>.Instance;
+        _eventSink = eventSink;
     }
 
     /// <summary>
@@ -38,6 +40,19 @@ public class AgentRuntime : IAgentRuntime
     {
         try
         {
+            // Emit RunStarted event if sink is provided
+            if (_eventSink != null)
+            {
+                var startedEvent = new RunStartedEvent
+                {
+                    Payload = new RunStartedEvent.RunStartedPayload
+                    {
+                        PipelineName = request.AgentName ?? request.ChainName ?? "unknown",
+                        WorkingDirectory = request.Context?.WorkingDirectory
+                    }
+                };
+                await _eventSink.RecordAsync(startedEvent, cancellationToken);
+            }
             // Validate request
             if (request == null)
             {
@@ -74,25 +89,71 @@ public class AgentRuntime : IAgentRuntime
             _logger.LogInformation("Starting runtime execution: AgentName={AgentName}, ChainName={ChainName}",
                 request.AgentName ?? "null", request.ChainName ?? "null");
 
+            AgentRuntimeResult result;
             if (agentNameSet)
             {
-                return await ExecuteAgentAsync(request.AgentName!, request.Context, cancellationToken);
+                result = await ExecuteAgentAsync(request.AgentName!, request.Context, cancellationToken);
             }
             else
             {
-                return await ExecuteChainAsync(request.ChainName!, request.Context, cancellationToken);
+                result = await ExecuteChainAsync(request.ChainName!, request.Context, cancellationToken);
             }
+
+            // Emit RunFinished event if sink is provided
+            if (_eventSink != null)
+            {
+                var finishedEvent = new RunFinishedEvent
+                {
+                    Payload = new RunFinishedEvent.RunFinishedPayload
+                    {
+                        Success = result.Success,
+                        FinalOutput = result.Output,
+                        Error = result.Error,
+                        TotalDurationMs = 0 // Duration not tracked here
+                    }
+                };
+                await _eventSink.RecordAsync(finishedEvent, cancellationToken);
+            }
+            return result;
         }
         catch (OperationCanceledException)
         {
             var error = "Execution was cancelled";
             _logger.LogWarning(error);
+            if (_eventSink != null)
+            {
+                var finishedEvent = new RunFinishedEvent
+                {
+                    Payload = new RunFinishedEvent.RunFinishedPayload
+                    {
+                        Success = false,
+                        FinalOutput = null,
+                        Error = error,
+                        TotalDurationMs = 0
+                    }
+                };
+                await _eventSink.RecordAsync(finishedEvent, cancellationToken);
+            }
             return new AgentRuntimeResult { Success = false, Error = error };
         }
         catch (Exception ex)
         {
             var error = $"Unexpected error in runtime execution: {ex.Message}";
             _logger.LogError(ex, error);
+            if (_eventSink != null)
+            {
+                var finishedEvent = new RunFinishedEvent
+                {
+                    Payload = new RunFinishedEvent.RunFinishedPayload
+                    {
+                        Success = false,
+                        FinalOutput = null,
+                        Error = error,
+                        TotalDurationMs = 0
+                    }
+                };
+                await _eventSink.RecordAsync(finishedEvent, CancellationToken.None);
+            }
             return new AgentRuntimeResult { Success = false, Error = error };
         }
     }

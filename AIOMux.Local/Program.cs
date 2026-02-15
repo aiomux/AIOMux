@@ -27,6 +27,27 @@ internal class Program
                     await RunCommand.ExecuteAsync(solutionPath);
                     break;
 
+                case "notes":
+                    await NotesCommand.ExecuteAsync(args);
+                    break;
+
+                case "runs":
+                    await RunManagementCommand.ExecuteAsync(args);
+                    break;
+
+                case "demo":
+                    if (args.Length > 1 && args[1].ToLower() == "notes")
+                    {
+                        await DemoNotesCommand.ExecuteAsync(args);
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Unknown demo command. Try: aiomux demo notes");
+                        PrintUsage();
+                        Environment.Exit(1);
+                    }
+                    break;
+
                 case "-h":
                 case "--help":
                 case "help":
@@ -54,11 +75,19 @@ internal class Program
         Console.WriteLine("Usage:");
         Console.WriteLine("  aiomux init                    - Initialize a new workspace");
         Console.WriteLine("  aiomux run [solutionPath]      - Start the interactive REPL");
+        Console.WriteLine("  aiomux notes <subcommand>      - Manage notes (add, search, list)");
+        Console.WriteLine("  aiomux runs <subcommand>       - Manage runs (list, show, replay)");
+        Console.WriteLine("  aiomux demo notes <subcommand> - Demo NotesSkill with replay");
         Console.WriteLine("  aiomux help                    - Show this help message");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  dotnet run --project src/AIOMux.Local -- init");
-        Console.WriteLine("  dotnet run --project src/AIOMux.Local -- run");
-        Console.WriteLine("  dotnet run --project src/AIOMux.Local -- run /path/to/workspace");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- init");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- run");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- run /path/to/workspace");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- notes add --text \"My note\"");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- notes search --q \"keyword\"");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- runs list");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- runs replay <runId>");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- demo notes add --text \"Demo note\" --replay");
     }
 }

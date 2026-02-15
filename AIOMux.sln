@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.2.11415.280 d18.0
+VisualStudioVersion = 18.2.11415.280
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Core", "AIOMux.Core\AIOMux.Core.csproj", "{CC231BE5-A970-469B-9837-4562A7189A1F}"
 EndProject
@@ -14,6 +14,18 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BasicChatPrompt", "BasicChatPrompt\BasicChatPrompt.csproj", "{17B77950-4D39-45E0-A06B-102E8AD4DFCE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Local", "AIOMux.Local\AIOMux.Local.csproj", "{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solutions", "Solutions", "{C4B44A15-9E6F-4896-907B-BB0D3F2B23F0}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "local-assistant", "local-assistant", "{C33C11C1-988F-4638-B3EA-DC20E798406B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Plugins", "Plugins", "{170DCCE8-D767-4004-94C3-273718DA041E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Skills.Notes", "AIOMux.Skills.Notes\AIOMux.Skills.Notes.csproj", "{F91F776F-EBE0-4901-861F-0B1BA6E1CBC9}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CodeReviewSummerizer", "CodeReviewSummerizer", "{72590668-5760-4EB7-958E-624E5EABED36}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeReviewSummerizer", "CodeReviewSummerizer\CodeReviewSummerizer.csproj", "{C4E7D141-A849-4964-8652-DA5921B0BEA4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -37,6 +49,14 @@ Global
 		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F91F776F-EBE0-4901-861F-0B1BA6E1CBC9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F91F776F-EBE0-4901-861F-0B1BA6E1CBC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F91F776F-EBE0-4901-861F-0B1BA6E1CBC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F91F776F-EBE0-4901-861F-0B1BA6E1CBC9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C4E7D141-A849-4964-8652-DA5921B0BEA4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4E7D141-A849-4964-8652-DA5921B0BEA4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C4E7D141-A849-4964-8652-DA5921B0BEA4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C4E7D141-A849-4964-8652-DA5921B0BEA4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -44,6 +64,10 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{A5B1C4A9-EBDA-4E4C-AFA9-977E4BF7A860} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{17B77950-4D39-45E0-A06B-102E8AD4DFCE} = {A5B1C4A9-EBDA-4E4C-AFA9-977E4BF7A860}
+		{C33C11C1-988F-4638-B3EA-DC20E798406B} = {C4B44A15-9E6F-4896-907B-BB0D3F2B23F0}
+		{F91F776F-EBE0-4901-861F-0B1BA6E1CBC9} = {170DCCE8-D767-4004-94C3-273718DA041E}
+		{72590668-5760-4EB7-958E-624E5EABED36} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{C4E7D141-A849-4964-8652-DA5921B0BEA4} = {72590668-5760-4EB7-958E-624E5EABED36}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D1DBB4C4-5D2B-44DF-930F-8F96A31BEEAD}

@@ -1,4 +1,6 @@
 using AIOMux.Core;
+using AIOMux.Core.Interfaces;
+using AIOMux.Core.Models;
 using AIOMux.Local.Config;
 using AIOMux.Local.Security;
 using AIOMux.Local.Skills;
@@ -12,8 +14,8 @@ namespace AIOMux.Local.Hosting;
 public class RunnerHost
 {
     private readonly AiomuxConfig _config;
-    private readonly AgentManager _agentManager;
-    private readonly AgentOrchestrator _orchestrator;
+    private readonly IAgentManager _agentManager;
+    private readonly IAgentRuntime _runtime;
     private readonly SkillLoader _skillLoader;
     private readonly PermissionService _permissionService;
     private readonly string _basePath;
@@ -25,7 +27,8 @@ public class RunnerHost
         _permissionService = new PermissionService(_config.Permissions);
         _skillLoader = new SkillLoader(Path.Combine(_basePath, _config.SkillsPath));
         _agentManager = new AgentManager();
-        _orchestrator = new AgentOrchestrator(_agentManager);
+        var orchestrator = new AgentOrchestrator(_agentManager);
+        _runtime = new AgentRuntime(_agentManager, orchestrator);
     }
 
     /// <summary>
@@ -33,14 +36,14 @@ public class RunnerHost
     /// </summary>
     public async Task InitializeAsync()
     {
-        Console.WriteLine("?? Initializing AIOMux runtime...");
+        Console.WriteLine("Initializing AIOMux runtime...");
 
         // Load plugins/skills from the skills directory
         await LoadSkillsAsync();
 
         if (_agentManager.GetAllAgents().Count == 0)
         {
-            Console.WriteLine("??  No agents loaded. Add skill plugins to the skills directory.");
+            Console.WriteLine("No agents loaded. Add skill plugins to the skills directory.");
         }
 
         PrintBanner();
@@ -55,11 +58,11 @@ public class RunnerHost
 
         if (pluginPaths.Count == 0)
         {
-            Console.WriteLine("??  No plugins found in skills directory (this is okay for MVP)");
+            Console.WriteLine("No plugins found in skills directory (this is okay for MVP)");
             return;
         }
 
-        Console.WriteLine($"?? Loading {pluginPaths.Count} plugin(s)...");
+        Console.WriteLine($"Loading {pluginPaths.Count} plugin(s)...");
 
         int loadedCount = 0;
         foreach (var pluginPath in pluginPaths)
@@ -70,18 +73,18 @@ public class RunnerHost
                 if (success)
                 {
                     loadedCount++;
-                    Console.WriteLine($"  ? Loaded: {Path.GetFileName(pluginPath)}");
+                    Console.WriteLine($"  Loaded: {Path.GetFileName(pluginPath)}");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  ? Failed to load {Path.GetFileName(pluginPath)}: {ex.Message}");
+                Console.WriteLine($"  Failed to load {Path.GetFileName(pluginPath)}: {ex.Message}");
             }
         }
 
         if (loadedCount > 0)
         {
-            Console.WriteLine($"? Loaded {loadedCount}/{pluginPaths.Count} plugin(s)");
+            Console.WriteLine($"Loaded {loadedCount}/{pluginPaths.Count} plugin(s)");
         }
     }
 
@@ -91,25 +94,25 @@ public class RunnerHost
     private void PrintBanner()
     {
         Console.WriteLine();
-        Console.WriteLine("???????????????????????????????????????????");
+        Console.WriteLine("=========================================");
         Console.WriteLine("        AIOMux Local Runtime");
-        Console.WriteLine("???????????????????????????????????????????");
+        Console.WriteLine("=========================================");
         Console.WriteLine();
 
         var agents = _agentManager.GetAllAgents();
-        Console.WriteLine($"?? Loaded Agents: {agents.Count}");
+        Console.WriteLine($"Loaded Agents: {agents.Count}");
         if (agents.Count > 0)
         {
             foreach (var agent in agents)
             {
-                Console.WriteLine($"   • {agent.Name}");
+                Console.WriteLine($"   - {agent.Name}");
             }
         }
 
         var skills = _skillLoader.GetSkillFolders().ToList();
-        Console.WriteLine($"?? Skills: {skills.Count}");
+        Console.WriteLine($"Skills: {skills.Count}");
 
-        Console.WriteLine($"?? Model Provider: {_config.Model.Provider}");
+        Console.WriteLine($"Model Provider: {_config.Model.Provider}");
         Console.WriteLine($"   Model: {_config.Model.ModelName}");
         if (!string.IsNullOrEmpty(_config.Model.BaseUrl))
         {
@@ -118,24 +121,17 @@ public class RunnerHost
 
         Console.WriteLine();
         Console.WriteLine("Type 'help' for commands or 'exit' to quit.");
-        Console.WriteLine("???????????????????????????????????????????");
+        Console.WriteLine("=========================================");
         Console.WriteLine();
     }
 
     /// <summary>
-    /// Executes a user input through the default agent.
+    /// Executes a user input through the default agent via the runtime facade.
     /// </summary>
     public async Task<string> ExecuteAsync(string input)
     {
         try
         {
-            var agent = _agentManager.GetByName(_config.DefaultAgentName);
-
-            if (agent == null)
-            {
-                return $"Error: Agent '{_config.DefaultAgentName}' not found.";
-            }
-
             var context = new AgentContext
             {
                 UserInput = input,
@@ -143,8 +139,22 @@ public class RunnerHost
                 AgentManager = _agentManager
             };
 
-            var (result, _) = await agent.ExecuteWithMetricsAsync(context, collectMetrics: false);
-            return result;
+            var request = new AgentRunRequest
+            {
+                AgentName = _config.DefaultAgentName,
+                Context = context
+            };
+
+            var result = await _runtime.RunAsync(request);
+            
+            if (result.Success)
+            {
+                return result.Output;
+            }
+            else
+            {
+                return $"Error: {result.Error}";
+            }
         }
         catch (Exception ex)
         {
@@ -171,7 +181,7 @@ public class RunnerHost
     /// <summary>
     /// Gets the agent manager.
     /// </summary>
-    public AgentManager GetAgentManager()
+    public IAgentManager GetAgentManager()
     {
         return _agentManager;
     }

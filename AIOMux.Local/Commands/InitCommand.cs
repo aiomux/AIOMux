@@ -18,11 +18,11 @@ public class InitCommand
         var configPath = Path.Combine(basePath, "aiomux.json");
         if (File.Exists(configPath))
         {
-            Console.WriteLine($"? Workspace already initialized at {basePath}");
+            Console.WriteLine($"Workspace already initialized at {basePath}");
             return;
         }
 
-        Console.WriteLine($"?? Initializing AIOMux workspace at {basePath}");
+        Console.WriteLine($"Initializing AIOMux workspace at {basePath}");
 
         try
         {
@@ -37,22 +37,22 @@ public class InitCommand
             ConfigLoader.CreateDefault(basePath);
 
             Console.WriteLine();
-            Console.WriteLine("? Workspace initialized successfully!");
+            Console.WriteLine("Workspace initialized successfully!");
             Console.WriteLine();
-            Console.WriteLine("?? Created directories:");
-            Console.WriteLine($"   • {skillsDir}");
-            Console.WriteLine($"   • {sandboxDir}");
+            Console.WriteLine("Created directories:");
+            Console.WriteLine($"   - {skillsDir}");
+            Console.WriteLine($"   - {sandboxDir}");
             Console.WriteLine();
-            Console.WriteLine("?? Created files:");
-            Console.WriteLine($"   • {configPath}");
+            Console.WriteLine("Created files:");
+            Console.WriteLine($"   - {configPath}");
             Console.WriteLine();
-            Console.WriteLine("?? Next steps:");
+            Console.WriteLine("Next steps:");
             Console.WriteLine("   1. Add skill plugins to the skills/ directory");
             Console.WriteLine("   2. Run 'aiomux run' to start the REPL");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"? Failed to initialize workspace: {ex.Message}");
+            Console.Error.WriteLine($"Failed to initialize workspace: {ex.Message}");
             throw;
         }
     }

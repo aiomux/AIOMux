@@ -25,7 +25,7 @@ public class RunCommand
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"? Error: {ex.Message}");
+            Console.Error.WriteLine($"Error: {ex.Message}");
             Environment.Exit(1);
         }
     }
@@ -51,7 +51,7 @@ public class RunCommand
             if (trimmed.Equals("exit", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.Equals("quit", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine("?? Goodbye!");
+                Console.WriteLine("Goodbye!");
                 break;
             }
 
@@ -115,7 +115,7 @@ public class RunCommand
         {
             foreach (var agent in agents)
             {
-                Console.WriteLine($"  • {agent.Name}");
+                Console.WriteLine($"  - {agent.Name}");
             }
         }
         Console.WriteLine();
