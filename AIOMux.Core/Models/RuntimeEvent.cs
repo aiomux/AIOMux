@@ -90,10 +90,49 @@ public class StepCompletedEvent : RuntimeEvent
 
     public class StepCompletedPayload
     {
+        public string RunId { get; set; } = string.Empty;
+        public int StepIndex { get; set; }
+        public string AgentName { get; set; } = string.Empty;
         public string StepName { get; set; } = string.Empty;
         public string Output { get; set; } = string.Empty;
         public string OutputHash { get; set; } = string.Empty;
         public double DurationMs { get; set; }
+    }
+}
+/// <summary>
+/// Event indicating a step started.
+/// </summary>
+public class StepStartedEvent : RuntimeEvent
+{
+    public StepStartedEvent()
+    {
+        Type = "StepStarted";
+    }
+
+    public class StepStartedPayload
+    {
+        public string RunId { get; set; } = string.Empty;
+        public int StepIndex { get; set; }
+        public string AgentName { get; set; } = string.Empty;
+    }
+}
+
+/// <summary>
+/// Event indicating a step failed.
+/// </summary>
+public class StepFailedEvent : RuntimeEvent
+{
+    public StepFailedEvent()
+    {
+        Type = "StepFailed";
+    }
+
+    public class StepFailedPayload
+    {
+        public string RunId { get; set; } = string.Empty;
+        public int StepIndex { get; set; }
+        public string AgentName { get; set; } = string.Empty;
+        public string ExceptionMessage { get; set; } = string.Empty;
     }
 }
 

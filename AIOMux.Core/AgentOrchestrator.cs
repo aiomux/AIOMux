@@ -12,16 +12,18 @@ public class AgentOrchestrator
 {
     private readonly IAgentManager _agentManager;
     private readonly ILogger<AgentOrchestrator> _logger;
+    private readonly Replay.IRuntimeEventSink? _eventSink;
 
     /// <summary>
     /// Creates a new instance of the agent orchestrator.
     /// </summary>
     /// <param name="agentManager">The agent manager to use for managing agents.</param>
     /// <param name="logger">The logger to use for logging operations.</param>
-    public AgentOrchestrator(IAgentManager agentManager, ILogger<AgentOrchestrator>? logger = null)
+    public AgentOrchestrator(IAgentManager agentManager, ILogger<AgentOrchestrator>? logger = null, Replay.IRuntimeEventSink? eventSink = null)
     {
         _agentManager = agentManager ?? throw new ArgumentNullException(nameof(agentManager));
         _logger = logger ?? NullLogger<AgentOrchestrator>.Instance;
+        _eventSink = eventSink;
     }
 
     /// <summary>
@@ -98,6 +100,22 @@ public class AgentOrchestrator
                 var step = chainModel.Steps[i];
                 var agent = _agentManager.GetByName(step.AgentName)!; // Safe due to validation above
 
+                // Emit StepStarted event
+                if (_eventSink != null)
+                {
+                    var runId = context.Variables.ContainsKey("runId") ? context.Variables["runId"]?.ToString() ?? string.Empty : string.Empty;
+                    var startedEvent = new Models.StepStartedEvent
+                    {
+                        Payload = new Models.StepStartedEvent.StepStartedPayload
+                        {
+                            RunId = runId,
+                            StepIndex = i,
+                            AgentName = step.AgentName
+                        }
+                    };
+                    await _eventSink.RecordAsync(startedEvent, cancellationToken);
+                }
+
                 try
                 {
                     _logger.LogInformation("Executing step {StepNumber}/{TotalSteps}: {AgentName}",
@@ -108,19 +126,22 @@ public class AgentOrchestrator
 
                     // Execute the agent with or without metrics
                     // Check if agent supports cancellation
+                    DateTime startTime_step = DateTime.UtcNow;
+                    string stepResult;
+                    double durationMs = 0;
                     if (agent is ICancellableAgent cancellableAgent)
                     {
                         if (context.Options.CollectMetrics)
                         {
-                            var startTime_step = DateTime.UtcNow;
-                            var stepResult = await cancellableAgent.ExecuteAsync(context, cancellationToken);
+                            stepResult = await cancellableAgent.ExecuteAsync(context, cancellationToken);
                             var endTime_step = DateTime.UtcNow;
+                            durationMs = (endTime_step - startTime_step).TotalMilliseconds;
                             result = stepResult;
 
                             var metrics = new AgentMetrics
                             {
                                 AgentName = step.AgentName,
-                                ExecutionTimeMs = (endTime_step - startTime_step).TotalMilliseconds,
+                                ExecutionTimeMs = durationMs,
                                 StartTime = startTime_step,
                                 EndTime = endTime_step
                             };
@@ -131,12 +152,18 @@ public class AgentOrchestrator
                         }
                         else
                         {
-                            result = await cancellableAgent.ExecuteAsync(context, cancellationToken);
+                            stepResult = await cancellableAgent.ExecuteAsync(context, cancellationToken);
+                            var endTime_step = DateTime.UtcNow;
+                            durationMs = (endTime_step - startTime_step).TotalMilliseconds;
+                            result = stepResult;
                         }
                     }
                     else if (context.Options.CollectMetrics)
                     {
-                        var (stepResult, metrics) = await agent.ExecuteWithMetricsAsync(context);
+                        var (stepResultValue, metrics) = await agent.ExecuteWithMetricsAsync(context);
+                        stepResult = stepResultValue;
+                        var endTime_step = DateTime.UtcNow;
+                        durationMs = (endTime_step - startTime_step).TotalMilliseconds;
                         result = stepResult;
 
                         if (metrics != null)
@@ -148,7 +175,10 @@ public class AgentOrchestrator
                     }
                     else
                     {
-                        result = await agent.ExecuteAsync(context);
+                        stepResult = await agent.ExecuteAsync(context);
+                        var endTime_step = DateTime.UtcNow;
+                        durationMs = (endTime_step - startTime_step).TotalMilliseconds;
+                        result = stepResult;
                     }
 
                     // Store the result in context variables
@@ -157,12 +187,46 @@ public class AgentOrchestrator
 
                     _logger.LogDebug("Agent {AgentName} completed successfully, output stored as {OutputKey}",
                         step.AgentName, outputKey);
+
+                    // Emit StepCompleted event
+                    if (_eventSink != null)
+                    {
+                        var runId = context.Variables.ContainsKey("runId") ? context.Variables["runId"]?.ToString() ?? string.Empty : string.Empty;
+                        var completedEvent = new Models.StepCompletedEvent
+                        {
+                            Payload = new Models.StepCompletedEvent.StepCompletedPayload
+                            {
+                                RunId = runId,
+                                StepIndex = i,
+                                AgentName = step.AgentName,
+                                OutputHash = ComputeHash(result ?? string.Empty),
+                                DurationMs = durationMs
+                            }
+                        };
+                        await _eventSink.RecordAsync(completedEvent, cancellationToken);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
                     var errorMessage = $"Execution cancelled at step {i + 1} ({step.AgentName})";
                     _logger.LogWarning("Chain execution cancelled at step {StepNumber}: {AgentName}",
                         i + 1, step.AgentName);
+                    // Emit StepFailed event
+                    if (_eventSink != null)
+                    {
+                        var runId = context.Variables.ContainsKey("runId") ? context.Variables["runId"]?.ToString() ?? string.Empty : string.Empty;
+                        var failedEvent = new Models.StepFailedEvent
+                        {
+                            Payload = new Models.StepFailedEvent.StepFailedPayload
+                            {
+                                RunId = runId,
+                                StepIndex = i,
+                                AgentName = step.AgentName,
+                                ExceptionMessage = errorMessage
+                            }
+                        };
+                        await _eventSink.RecordAsync(failedEvent, cancellationToken);
+                    }
                     return new ChainRunResult(false, result, errorMessage, i, step.AgentName);
                 }
                 catch (Exception ex)
@@ -170,6 +234,22 @@ public class AgentOrchestrator
                     var errorMessage = $"Error executing agent {step.AgentName} in step {i + 1}: {ex.Message}";
                     _logger.LogError(ex, "Error executing agent {AgentName} in step {StepNumber}: {Error}",
                         step.AgentName, i + 1, ex.Message);
+                    // Emit StepFailed event
+                    if (_eventSink != null)
+                    {
+                        var runId = context.Variables.ContainsKey("runId") ? context.Variables["runId"]?.ToString() ?? string.Empty : string.Empty;
+                        var failedEvent = new Models.StepFailedEvent
+                        {
+                            Payload = new Models.StepFailedEvent.StepFailedPayload
+                            {
+                                RunId = runId,
+                                StepIndex = i,
+                                AgentName = step.AgentName,
+                                ExceptionMessage = ex.Message
+                            }
+                        };
+                        await _eventSink.RecordAsync(failedEvent, cancellationToken);
+                    }
                     return new ChainRunResult(false, result, errorMessage, i, step.AgentName);
                 }
             }
@@ -465,5 +545,13 @@ public class AgentOrchestrator
 
         // Use the PlannerAgent to create and execute a dynamic chain
         return ExecuteDynamicChainAsync("PlannerAgent", context.UserInput, context);
+    }
+    // Utility for output hash
+    private static string ComputeHash(string input)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var bytes = System.Text.Encoding.UTF8.GetBytes(input);
+        var hash = sha.ComputeHash(bytes);
+        return BitConverter.ToString(hash).Replace("-", "");
     }
 }
