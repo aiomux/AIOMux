@@ -75,8 +75,11 @@ public class AgentChain : IAgent
         // Standard execution path without metrics
         string lastResult = string.Empty;
 
-        foreach (var agent in _chain)
+        for (int index = 0; index < _chain.Count; index++)
         {
+            var agent = _chain[index];
+            context.Variables["stepIndex"] = index;
+
             // Execute current agent
             lastResult = await ToolExecution.RunAsync(agent, context);
 
@@ -95,8 +98,11 @@ public class AgentChain : IAgent
         string lastResult = string.Empty;
         var allMetrics = new List<AgentMetrics>();
 
-        foreach (var agent in _chain)
+        for (int index = 0; index < _chain.Count; index++)
         {
+            var agent = _chain[index];
+            context.Variables["stepIndex"] = index;
+
             // Execute agent with metrics collection
             var (result, metrics) = await ToolExecution.RunWithMetricsAsync(agent, context);
 

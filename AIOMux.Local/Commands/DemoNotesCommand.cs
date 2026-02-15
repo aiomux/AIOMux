@@ -3,8 +3,8 @@ using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
 using AIOMux.Core.Replay;
 using AIOMux.Skills.Notes;
-using AIOMux.Skills.Notes.Storage;
 using AIOMux.Skills.Notes.Models;
+using AIOMux.Skills.Notes.Storage;
 using System.Text.RegularExpressions;
 
 namespace AIOMux.Local.Commands;

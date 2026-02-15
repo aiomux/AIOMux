@@ -1,6 +1,6 @@
+using AIOMux.Core;
 using AIOMux.Skills.Notes;
 using AIOMux.Skills.Notes.Storage;
-using AIOMux.Core;
 
 namespace AIOMux.Local.Commands;
 

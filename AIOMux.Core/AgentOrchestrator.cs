@@ -97,6 +97,8 @@ public class AgentOrchestrator
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                context.Variables["stepIndex"] = i;
+
                 var step = chainModel.Steps[i];
                 var agent = _agentManager.GetByName(step.AgentName)!; // Safe due to validation above
 

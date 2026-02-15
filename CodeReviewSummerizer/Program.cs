@@ -28,14 +28,14 @@ internal class Program
         {
             Console.Write("Enter file path to review (or 'exit' to quit): ");
             string? inputPath = Console.ReadLine();
-            
+
             // Exit if user types 'exit' or empty input
             if (string.IsNullOrWhiteSpace(inputPath) || inputPath.Trim().ToLower() == "exit")
             {
                 Console.WriteLine("Exiting Code Review Summarizer. Goodbye!");
                 break;
             }
-            
+
             await ReviewCodeFileAsync(inputPath.Trim(), llm);
             Console.WriteLine();
         }
@@ -86,7 +86,7 @@ internal class Program
         try
         {
             string review = await llm.GenerateAsync(reviewPrompt);
-            
+
             // Print review with slight delay for readability
             foreach (char c in review)
             {

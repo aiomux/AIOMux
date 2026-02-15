@@ -146,7 +146,7 @@ public class RunnerHost
             };
 
             var result = await _runtime.RunAsync(request);
-            
+
             if (result.Success)
             {
                 return result.Output;

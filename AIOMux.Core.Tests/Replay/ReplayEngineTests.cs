@@ -1,5 +1,5 @@
+using AIOMux.Core.Models;
 using AIOMux.Core.Replay;
-using AIOMux.Core.Replay.Models;
 using Xunit;
 
 namespace AIOMux.Core.Tests.Replay;
@@ -84,9 +84,9 @@ public class ReplayEngineTests : IDisposable
             }
         });
 
-        await _recorder.RecordEventAsync(new ToolResultEvent
+        await _recorder.RecordEventAsync(new AIOMux.Core.Models.ToolResultEvent
         {
-            Payload = new ToolResultEvent.ToolResultPayload
+            Payload = new AIOMux.Core.Models.ToolResultEvent.ToolResultPayload
             {
                 ToolName = "TestTool",
                 Result = "tool result",
@@ -157,12 +157,12 @@ public class ReplayEngineTests : IDisposable
         // Manually tamper with the file using string manipulation
         var filePath = Path.Combine(_testPath, $"{run.RunId}.jsonl");
         var lines = await File.ReadAllLinesAsync(filePath);
-        
+
         // Tamper with the PayloadHash property in the second line (InputReceived event)
         // Find the PayloadHash and change it
         var doc = System.Text.Json.JsonDocument.Parse(lines[1]);
         var originalHash = doc.RootElement.GetProperty("PayloadHash").GetString();
-        
+
         // Replace the hash with a wrong one
         lines[1] = lines[1].Replace($"\"{originalHash}\"", "\"TAMPERED_HASH\"");
         await File.WriteAllLinesAsync(filePath, lines);

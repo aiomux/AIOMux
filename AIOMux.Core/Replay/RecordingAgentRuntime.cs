@@ -49,6 +49,12 @@ public class RecordingAgentRuntime : IAgentRuntime, IRuntimeEventSink
 
         try
         {
+            // Set up ToolDispatcher with recording event sink
+            if (request.Context != null)
+            {
+                request.Context.ToolDispatcher = new ToolDispatcher(this);
+            }
+
             // Create run metadata
             var run = new Run
             {
@@ -59,6 +65,11 @@ public class RecordingAgentRuntime : IAgentRuntime, IRuntimeEventSink
 
             // Start recording
             runId = await _recorder.StartRunAsync(run);
+
+            if (request.Context != null)
+            {
+                request.Context.Variables["runId"] = runId;
+            }
 
             // Record input
             var inputEvent = new InputReceivedEvent
@@ -105,6 +116,113 @@ public class RecordingAgentRuntime : IAgentRuntime, IRuntimeEventSink
                 catch
                 {
                     // Ignore recording errors during exception handling
+                }
+            }
+
+            throw;
+        }
+    }
+
+    public async Task<AgentRuntimeResult> ForkAsync(
+        AgentForkRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_enableRecording)
+        {
+            return await _innerRuntime.ForkAsync(request, cancellationToken);
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        string? runId = null;
+
+        try
+        {
+            if (request.Context == null)
+            {
+                return new AgentRuntimeResult { Success = false, Error = "Fork request context cannot be null" };
+            }
+
+            var replayResult = await ForkReplayHelper.LoadReplayAsync(request.SourceRunId, cancellationToken);
+            if (!replayResult.Success)
+            {
+                return new AgentRuntimeResult
+                {
+                    Success = false,
+                    Error = replayResult.Error ?? "Failed to load replay data."
+                };
+            }
+
+            if (!ForkReplayHelper.TryHydrateContext(request.Context, replayResult.Events, request.EventIndex, out var hydrateError))
+            {
+                return new AgentRuntimeResult { Success = false, Error = hydrateError };
+            }
+
+            var newRunId = Guid.NewGuid().ToString();
+            request.Context.Variables["runId"] = newRunId;
+            request.Context.ReplayMode = request.ReplayMode;
+            request.Context.ReplaySource = request.ReplayMode == ReplayMode.None
+                ? null
+                : ForkReplayHelper.BuildReplaySource(request.SourceRunId, newRunId);
+
+            request.Context.ToolDispatcher = new ToolDispatcher(this, request.PolicyEngine);
+
+            var run = new Run
+            {
+                RunId = newRunId,
+                PipelineName = request.AgentName ?? request.ChainName ?? "unknown",
+                WorkingDirectory = request.Context?.WorkingDirectory,
+                StartedUtc = DateTime.UtcNow
+            };
+
+            runId = await _recorder.StartRunAsync(run);
+
+            var inputEvent = new InputReceivedEvent
+            {
+                Payload = new InputReceivedEvent.InputReceivedPayload
+                {
+                    Input = request.Context?.UserInput ?? string.Empty,
+                    InputHash = ComputeHash(request.Context?.UserInput ?? string.Empty)
+                }
+            };
+            await _recorder.RecordEventAsync(inputEvent);
+
+            var runRequest = new AgentRunRequest
+            {
+                AgentName = request.AgentName,
+                ChainName = request.ChainName,
+                Context = request.Context
+            };
+
+            var result = await _innerRuntime.RunAsync(runRequest, cancellationToken);
+
+            stopwatch.Stop();
+
+            await _recorder.FinishRunAsync(
+                success: result.Success,
+                finalOutput: result.Output,
+                error: result.Error,
+                totalDurationMs: stopwatch.Elapsed.TotalMilliseconds
+            );
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+
+            if (runId != null)
+            {
+                try
+                {
+                    await _recorder.FinishRunAsync(
+                        success: false,
+                        finalOutput: null,
+                        error: ex.Message,
+                        totalDurationMs: stopwatch.Elapsed.TotalMilliseconds
+                    );
+                }
+                catch
+                {
                 }
             }
 

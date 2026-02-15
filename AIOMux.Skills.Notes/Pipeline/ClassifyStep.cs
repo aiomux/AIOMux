@@ -1,5 +1,3 @@
-using AIOMux.Skills.Notes.Models;
-
 namespace AIOMux.Skills.Notes.Pipeline;
 
 /// <summary>

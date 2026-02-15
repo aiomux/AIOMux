@@ -1,5 +1,5 @@
+using AIOMux.Core.Models;
 using AIOMux.Core.Replay;
-using AIOMux.Core.Replay.Models;
 using Xunit;
 
 namespace AIOMux.Core.Tests.Replay;
@@ -59,7 +59,7 @@ public class RunRecorderTests : IDisposable
         };
 
         await _recorder.RecordEventAsync(inputEvent);
-        
+
         // Finish the run to close the file
         await _recorder.FinishRunAsync(true);
 
@@ -87,7 +87,7 @@ public class RunRecorderTests : IDisposable
 
         await _recorder.RecordEventAsync(event1);
         await _recorder.RecordEventAsync(event2);
-        
+
         // Finish the run to close the file
         await _recorder.FinishRunAsync(true);
 
@@ -212,9 +212,9 @@ public class RunRecorderTests : IDisposable
             var doc1 = System.Text.Json.JsonDocument.Parse(file1[i]);
             var doc2 = System.Text.Json.JsonDocument.Parse(file2[i]);
 
-            Assert.Equal(doc1.RootElement.GetProperty("Type").GetString(), 
+            Assert.Equal(doc1.RootElement.GetProperty("Type").GetString(),
                         doc2.RootElement.GetProperty("Type").GetString());
-            Assert.Equal(doc1.RootElement.GetProperty("Seq").GetInt32(), 
+            Assert.Equal(doc1.RootElement.GetProperty("Seq").GetInt32(),
                         doc2.RootElement.GetProperty("Seq").GetInt32());
         }
     }

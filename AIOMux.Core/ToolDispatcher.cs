@@ -1,12 +1,10 @@
-using System.Threading;
-using System.Threading.Tasks;
 using AIOMux.Core.Models;
 using AIOMux.Core.Policy;
 using AIOMux.Core.Replay;
 
 namespace AIOMux.Core;
 
-public class ToolDispatcher
+public class ToolDispatcher : IToolDispatcher
 {
     private readonly IRuntimeEventSink _eventSink;
     private readonly IPolicyEngine _policyEngine;
@@ -19,6 +17,9 @@ public class ToolDispatcher
 
     public async Task<ToolResult> InvokeAsync(ToolCall call, AgentContext context, CancellationToken ct = default)
     {
+        // Check cancellation at the start
+        ct.ThrowIfCancellationRequested();
+
         // 1. ToolProposed event
         await _eventSink.RecordAsync(
             new Replay.Models.ToolProposedEvent
@@ -77,6 +78,9 @@ public class ToolDispatcher
         }
         else
         {
+            // Check cancellation before executing tool
+            ct.ThrowIfCancellationRequested();
+
             // Execute tool normally
             if (!context.Tools.TryGetValue(call.ToolName, out var tool))
             {

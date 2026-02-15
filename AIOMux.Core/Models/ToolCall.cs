@@ -1,5 +1,3 @@
-using System;
-
 namespace AIOMux.Core.Models
 {
     public class ToolCall

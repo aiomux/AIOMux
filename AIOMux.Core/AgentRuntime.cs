@@ -1,5 +1,7 @@
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
+using AIOMux.Core.Policy;
+using AIOMux.Core.Replay;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -40,6 +42,27 @@ public class AgentRuntime : IAgentRuntime
     {
         try
         {
+            // Validate request
+            if (request == null)
+            {
+                var error = "Request cannot be null";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            if (request.Context == null)
+            {
+                var error = "Request context cannot be null";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            // Set up ToolDispatcher if event sink is available
+            if (_eventSink != null)
+            {
+                request.Context.ToolDispatcher = new ToolDispatcher(_eventSink);
+            }
+
             // Emit RunStarted event if sink is provided
             if (_eventSink != null)
             {
@@ -290,6 +313,156 @@ public class AgentRuntime : IAgentRuntime
             var error = $"Error executing chain {chainName}: {ex.Message}";
             _logger.LogError(ex, error);
             return new AgentRuntimeResult { Success = false, Error = error, AgentName = chainName };
+        }
+    }
+
+    /// <summary>
+    /// Forks a new execution flow from an existing run, with optional replay and policy configuration.
+    /// </summary>
+    /// <param name="request">The fork request specifying source run ID, event index, and optional agent/chain to run.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>Structured result with success status, output, and optional error details.</returns>
+    public async Task<AgentRuntimeResult> ForkAsync(AgentForkRequest request, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (request == null)
+            {
+                var error = "Fork request cannot be null";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            if (request.Context == null)
+            {
+                var error = "Fork request context cannot be null";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            var replayResult = await ForkReplayHelper.LoadReplayAsync(request.SourceRunId, cancellationToken);
+            if (!replayResult.Success)
+            {
+                var error = replayResult.Error ?? "Failed to load replay data.";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            if (!ForkReplayHelper.TryHydrateContext(request.Context, replayResult.Events, request.EventIndex, out var hydrateError))
+            {
+                _logger.LogError(hydrateError);
+                return new AgentRuntimeResult { Success = false, Error = hydrateError };
+            }
+
+            var newRunId = Guid.NewGuid().ToString();
+            request.Context.Variables["runId"] = newRunId;
+            request.Context.ReplayMode = request.ReplayMode;
+            request.Context.ReplaySource = request.ReplayMode == ReplayMode.None
+                ? null
+                : ForkReplayHelper.BuildReplaySource(request.SourceRunId, newRunId);
+
+            if (_eventSink != null || request.PolicyEngine != null)
+            {
+                var policyEngine = request.PolicyEngine ?? new AllowAllPolicyEngine();
+                request.Context.ToolDispatcher = new ToolDispatcher(_eventSink ?? new NullRuntimeEventSink(), policyEngine);
+            }
+
+            if (_eventSink != null)
+            {
+                var startedEvent = new RunStartedEvent
+                {
+                    Payload = new RunStartedEvent.RunStartedPayload
+                    {
+                        PipelineName = request.AgentName ?? request.ChainName ?? "unknown",
+                        WorkingDirectory = request.Context?.WorkingDirectory
+                    }
+                };
+                await _eventSink.RecordAsync(startedEvent, cancellationToken);
+            }
+
+            var agentNameSet = !string.IsNullOrWhiteSpace(request.AgentName);
+            var chainNameSet = !string.IsNullOrWhiteSpace(request.ChainName);
+
+            if (!agentNameSet && !chainNameSet)
+            {
+                var error = "Either AgentName or ChainName must be specified";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            if (agentNameSet && chainNameSet)
+            {
+                var error = "Only one of AgentName or ChainName can be specified, not both";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            AgentRuntimeResult result;
+            if (agentNameSet)
+            {
+                result = await ExecuteAgentAsync(request.AgentName!, request.Context, cancellationToken);
+            }
+            else
+            {
+                result = await ExecuteChainAsync(request.ChainName!, request.Context, cancellationToken);
+            }
+
+            if (_eventSink != null)
+            {
+                var finishedEvent = new RunFinishedEvent
+                {
+                    Payload = new RunFinishedEvent.RunFinishedPayload
+                    {
+                        Success = result.Success,
+                        FinalOutput = result.Output,
+                        Error = result.Error,
+                        TotalDurationMs = 0
+                    }
+                };
+                await _eventSink.RecordAsync(finishedEvent, cancellationToken);
+            }
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            var error = "Execution was cancelled";
+            _logger.LogWarning(error);
+            if (_eventSink != null)
+            {
+                var finishedEvent = new RunFinishedEvent
+                {
+                    Payload = new RunFinishedEvent.RunFinishedPayload
+                    {
+                        Success = false,
+                        FinalOutput = null,
+                        Error = error,
+                        TotalDurationMs = 0
+                    }
+                };
+                await _eventSink.RecordAsync(finishedEvent, cancellationToken);
+            }
+            return new AgentRuntimeResult { Success = false, Error = error };
+        }
+        catch (Exception ex)
+        {
+            var error = $"Unexpected error in fork execution: {ex.Message}";
+            _logger.LogError(ex, error);
+            if (_eventSink != null)
+            {
+                var finishedEvent = new RunFinishedEvent
+                {
+                    Payload = new RunFinishedEvent.RunFinishedPayload
+                    {
+                        Success = false,
+                        FinalOutput = null,
+                        Error = error,
+                        TotalDurationMs = 0
+                    }
+                };
+                await _eventSink.RecordAsync(finishedEvent, CancellationToken.None);
+            }
+            return new AgentRuntimeResult { Success = false, Error = error };
         }
     }
 }

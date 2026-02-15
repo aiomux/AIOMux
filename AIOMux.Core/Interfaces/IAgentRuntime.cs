@@ -15,4 +15,12 @@ public interface IAgentRuntime
     /// <param name="cancellationToken">Token to cancel the operation</param>
     /// <returns>Structured result with success status, output, and optional error details</returns>
     Task<AgentRuntimeResult> RunAsync(AgentRunRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Forks execution from a previous run and continues from a hydrated state.
+    /// </summary>
+    /// <param name="request">The fork request with source run info and new execution details</param>
+    /// <param name="cancellationToken">Token to cancel the operation</param>
+    /// <returns>Structured result with success status, output, and optional error details</returns>
+    Task<AgentRuntimeResult> ForkAsync(AgentForkRequest request, CancellationToken cancellationToken = default);
 }
