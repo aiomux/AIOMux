@@ -237,3 +237,4 @@ public class RecordingAgentRuntime : IAgentRuntime, IRuntimeEventSink
         return Convert.ToHexString(hash);
     }
 }
+

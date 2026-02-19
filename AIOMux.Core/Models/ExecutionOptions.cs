@@ -20,3 +20,4 @@ public class ExecutionOptions
     /// </summary>
     public bool IncludeDetailedMetrics { get; set; } = true;
 }
+

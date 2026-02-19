@@ -16,3 +16,4 @@ public class ToolProposedEvent : RuntimeEvent
         public string JsonArgs { get; set; } = string.Empty;
     }
 }
+

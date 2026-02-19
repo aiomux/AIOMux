@@ -11,3 +11,4 @@ public class ToolResultEvent : RuntimeEvent
 
     public ToolResult? Result { get; set; }
 }
+

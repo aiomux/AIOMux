@@ -120,3 +120,4 @@ public class AgentChain : IAgent
         return (lastResult, allMetrics);
     }
 }
+

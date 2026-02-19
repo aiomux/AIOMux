@@ -12,3 +12,4 @@ public interface IReplaySource
     /// </summary>
     bool TryGetToolResult(string callId, out ToolResult result);
 }
+

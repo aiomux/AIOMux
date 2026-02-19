@@ -24,3 +24,5 @@ public interface IAgentRuntime
     /// <returns>Structured result with success status, output, and optional error details</returns>
     Task<AgentRuntimeResult> ForkAsync(AgentForkRequest request, CancellationToken cancellationToken = default);
 }
+
+

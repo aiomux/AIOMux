@@ -12,3 +12,4 @@ public class NullRuntimeEventSink : IRuntimeEventSink
         return Task.CompletedTask;
     }
 }
+

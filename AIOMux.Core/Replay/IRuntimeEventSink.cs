@@ -10,3 +10,4 @@ namespace AIOMux.Core.Replay
         Task RecordAsync(RuntimeEvent evt, CancellationToken ct);
     }
 }
+

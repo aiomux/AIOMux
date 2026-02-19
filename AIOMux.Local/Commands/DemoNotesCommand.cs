@@ -413,3 +413,5 @@ public static class DemoNotesCommand
         Console.WriteLine("  - Proves determinism and permission enforcement");
     }
 }
+
+

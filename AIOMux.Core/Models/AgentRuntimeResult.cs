@@ -30,3 +30,4 @@ public sealed record AgentRuntimeResult
     /// </summary>
     public string? AgentName { get; init; }
 }
+

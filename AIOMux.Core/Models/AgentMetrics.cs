@@ -30,3 +30,4 @@ public class AgentMetrics
     /// </summary>
     public Dictionary<string, object> CustomMetrics { get; set; } = new();
 }
+

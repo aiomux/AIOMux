@@ -15,3 +15,4 @@ public class AgentResult
     /// </summary>
     public AgentMetrics Metrics { get; set; } = new AgentMetrics();
 }
+

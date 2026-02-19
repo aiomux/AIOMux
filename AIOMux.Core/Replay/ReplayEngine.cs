@@ -1,4 +1,5 @@
 using AIOMux.Core.Models;
+using AIOMux.Core.Replay.Models;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -116,7 +117,7 @@ public class ReplayEngine
                 "InputReceived" => JsonSerializer.Deserialize<InputReceivedEvent>(json),
                 "StepCompleted" => JsonSerializer.Deserialize<StepCompletedEvent>(json),
                 "ToolInvoked" => JsonSerializer.Deserialize<ToolInvokedEvent>(json),
-                "ToolResult" => JsonSerializer.Deserialize<ToolResultEvent>(json),
+                "ToolResult" => JsonSerializer.Deserialize<Replay.Models.ToolResultEvent>(json),
                 "RunFinished" => JsonSerializer.Deserialize<RunFinishedEvent>(json),
                 _ => baseEvent
             };
@@ -247,18 +248,63 @@ public class ReplayEngine
                     });
                 }
             }
-            else if (evt.Type == "ToolResult")
+            else if (evt.Type == "ToolProposed")
             {
-                var payload = JsonSerializer.Deserialize<ToolResultEvent.ToolResultPayload>(
+                var payload = JsonSerializer.Deserialize<ToolProposedEvent.ToolProposedPayload>(
+                    JsonSerializer.Serialize(evt.Payload)
+                );
+                if (payload != null)
+                {
+                    toolCalls.Add(new ReplayToolCall
+                    {
+                        ToolName = payload.ToolName,
+                        Args = payload.JsonArgs,
+                        Timestamp = evt.TimestampUtc,
+                        CallId = payload.CallId
+                    });
+                }
+            }
+            else if (evt.Type == "PolicyEvaluated")
+            {
+                var payload = JsonSerializer.Deserialize<PolicyEvaluatedEvent.PolicyEvaluatedPayload>(
                     JsonSerializer.Serialize(evt.Payload)
                 );
                 if (payload != null && toolCalls.Count > 0)
                 {
                     var lastCall = toolCalls[^1];
-                    lastCall.Result = payload.Result;
-                    lastCall.DurationMs = payload.DurationMs;
-                    lastCall.Success = payload.Success;
-                    lastCall.Error = payload.Error;
+                    if (lastCall.CallId == payload.CallId)
+                    {
+                        lastCall.PolicyAllowed = payload.Allowed;
+                        lastCall.PolicyDenyReason = payload.DenyReason;
+                    }
+                }
+            }
+            else if (evt.Type == "ToolExecuted")
+            {
+                var payload = JsonSerializer.Deserialize<ToolExecutedEvent.ToolExecutedPayload>(
+                    JsonSerializer.Serialize(evt.Payload)
+                );
+                if (payload != null && toolCalls.Count > 0)
+                {
+                    var lastCall = toolCalls[^1];
+                    if (lastCall.CallId == payload.CallId)
+                    {
+                        lastCall.FromReplay = payload.FromReplay;
+                    }
+                }
+            }
+            else if (evt.Type == "ToolResult")
+            {
+                var toolResultEvent = evt as Replay.Models.ToolResultEvent;
+                if (toolResultEvent?.Result != null && toolCalls.Count > 0)
+                {
+                    var lastCall = toolCalls[^1];
+                    if (lastCall.CallId == toolResultEvent.Result.CallId)
+                    {
+                        lastCall.Result = toolResultEvent.Result.JsonResult;
+                        lastCall.Success = toolResultEvent.Result.Success;
+                        lastCall.Error = toolResultEvent.Result.Error;
+                    }
                 }
             }
             else if (evt.Type == "RunFinished")
@@ -296,46 +342,3 @@ public class ReplayEngine
     }
 }
 
-/// <summary>
-/// Result of replaying a run.
-/// </summary>
-public class ReplayResult
-{
-    public bool Success { get; set; }
-    public string? Error { get; set; }
-    public string? RunId { get; set; }
-    public string? PipelineName { get; set; }
-    public string? Input { get; set; }
-    public string? FinalOutput { get; set; }
-    public double TotalDurationMs { get; set; }
-    public DateTime? StartTime { get; set; }
-    public DateTime? EndTime { get; set; }
-    public List<RuntimeEvent> Events { get; set; } = new();
-    public List<ReplayStep> Steps { get; set; } = new();
-    public List<ReplayToolCall> ToolCalls { get; set; } = new();
-}
-
-/// <summary>
-/// A step reconstructed from replay.
-/// </summary>
-public class ReplayStep
-{
-    public string StepName { get; set; } = string.Empty;
-    public string Output { get; set; } = string.Empty;
-    public double DurationMs { get; set; }
-    public DateTime Timestamp { get; set; }
-}
-
-/// <summary>
-/// A tool call reconstructed from replay.
-/// </summary>
-public class ReplayToolCall
-{
-    public string ToolName { get; set; } = string.Empty;
-    public string Args { get; set; } = string.Empty;
-    public string? Result { get; set; }
-    public double DurationMs { get; set; }
-    public bool Success { get; set; } = true;
-    public string? Error { get; set; }
-    public DateTime Timestamp { get; set; }
-}

@@ -16,3 +16,5 @@ public interface IToolDispatcher
     /// <returns>The result of the tool invocation.</returns>
     Task<ToolResult> InvokeAsync(ToolCall call, AgentContext context, CancellationToken ct = default);
 }
+
+

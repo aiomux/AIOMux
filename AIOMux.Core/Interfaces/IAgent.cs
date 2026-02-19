@@ -1,4 +1,4 @@
-﻿using AIOMux.Core.Models;
+using AIOMux.Core.Models;
 
 namespace AIOMux.Core.Interfaces;
 
@@ -43,3 +43,4 @@ public interface IAgent
         return (result, null);
     }
 }
+

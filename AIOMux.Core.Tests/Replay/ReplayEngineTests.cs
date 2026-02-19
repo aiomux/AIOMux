@@ -1,4 +1,4 @@
-using AIOMux.Core.Models;
+using AIOMux.Core.Models;`nusing AIOMux.Core.Models.Agent;`nusing AIOMux.Core.Models.Events;`nusing AIOMux.Core.Models.Replay;
 using AIOMux.Core.Replay;
 using Xunit;
 
@@ -245,3 +245,4 @@ public class ReplayEngineTests : IDisposable
         Assert.Contains("not found", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 }
+

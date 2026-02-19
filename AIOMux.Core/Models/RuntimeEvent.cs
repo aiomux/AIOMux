@@ -193,3 +193,4 @@ public class RunFinishedEvent : RuntimeEvent
         public double TotalDurationMs { get; set; }
     }
 }
+

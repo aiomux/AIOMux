@@ -43,3 +43,4 @@ public sealed record AgentForkRequest
     /// </summary>
     public ReplayMode ReplayMode { get; init; } = ReplayMode.None;
 }
+
