@@ -12,12 +12,23 @@
     <Product>AIOMux Local</Product>
     <Description>Local orchestration and workspace initialization for AIOMux agents.</Description>
     <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <StartupObject>AIOMux.Local.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AIOMux.Clients\AIOMux.Clients.csproj" />
     <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
     <ProjectReference Include="..\AIOMux.Skills.Notes\AIOMux.Skills.Notes.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Gauntlets\Fixtures\rag-poisoned-doc.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Demo\" />
   </ItemGroup>
 
 </Project>

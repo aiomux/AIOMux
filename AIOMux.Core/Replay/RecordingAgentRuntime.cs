@@ -49,41 +49,49 @@ public class RecordingAgentRuntime : IAgentRuntime, IRuntimeEventSink
 
         try
         {
-            // Set up ToolDispatcher with recording event sink
-            if (request.Context != null)
+            var context = request.Context ?? new AgentContext();
+
+            // Host-provided dispatcher takes precedence; recording installs one only when absent.
+            if (context.ToolDispatcher == null)
             {
-                request.Context.ToolDispatcher = new ToolDispatcher(this);
+                context.ToolDispatcher = new ToolDispatcher(this);
             }
 
             // Create run metadata
             var run = new Run
             {
                 PipelineName = request.AgentName ?? request.ChainName ?? "unknown",
-                WorkingDirectory = request.Context?.WorkingDirectory,
+                WorkingDirectory = context.WorkingDirectory,
                 StartedUtc = DateTime.UtcNow
             };
 
             // Start recording
             runId = await _recorder.StartRunAsync(run);
 
-            if (request.Context != null)
-            {
-                request.Context.Variables["runId"] = runId;
-            }
+            context.Variables["runId"] = runId;
 
             // Record input
             var inputEvent = new InputReceivedEvent
             {
                 Payload = new InputReceivedEvent.InputReceivedPayload
                 {
-                    Input = request.Context?.UserInput ?? string.Empty,
-                    InputHash = ComputeHash(request.Context?.UserInput ?? string.Empty)
+                    Input = context.UserInput ?? string.Empty,
+                    InputHash = ComputeHash(context.UserInput ?? string.Empty)
                 }
             };
             await _recorder.RecordEventAsync(inputEvent);
 
             // Execute
-            var result = await _innerRuntime.RunAsync(request, cancellationToken);
+            var runRequest = request.Context == null
+                ? new AgentRunRequest
+                {
+                    AgentName = request.AgentName,
+                    ChainName = request.ChainName,
+                    Context = context
+                }
+                : request;
+
+            var result = await _innerRuntime.RunAsync(runRequest, cancellationToken);
 
             stopwatch.Stop();
 
@@ -164,7 +172,11 @@ public class RecordingAgentRuntime : IAgentRuntime, IRuntimeEventSink
                 ? null
                 : ForkReplayHelper.BuildReplaySource(request.SourceRunId, newRunId);
 
-            request.Context.ToolDispatcher = new ToolDispatcher(this, request.PolicyEngine);
+            // Host-provided dispatcher takes precedence; recording installs one only when absent.
+            if (request.Context.ToolDispatcher == null)
+            {
+                request.Context.ToolDispatcher = new ToolDispatcher(this, request.PolicyEngine);
+            }
 
             var run = new Run
             {

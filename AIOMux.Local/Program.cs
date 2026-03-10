@@ -16,6 +16,8 @@ internal class Program
 
             var command = args[0].ToLower();
 
+            await GauntletRagPoisonExfilCommand.ExecuteAsync(args);
+
             switch (command)
             {
                 case "init":
@@ -48,6 +50,10 @@ internal class Program
                     }
                     break;
 
+                case "gauntlet":
+                    await GauntletRagPoisonExfilCommand.ExecuteAsync(args);
+                    break;
+
                 case "-h":
                 case "--help":
                 case "help":
@@ -78,6 +84,7 @@ internal class Program
         Console.WriteLine("  aiomux notes <subcommand>      - Manage notes (add, search, list)");
         Console.WriteLine("  aiomux runs <subcommand>       - Manage runs (list, show, replay)");
         Console.WriteLine("  aiomux demo notes <subcommand> - Demo NotesSkill with replay");
+        Console.WriteLine("  aiomux gauntlet rag-poison-exfil - Run RAG poison exfiltration gauntlet demo");
         Console.WriteLine("  aiomux help                    - Show this help message");
         Console.WriteLine();
         Console.WriteLine("Examples:");
@@ -89,5 +96,6 @@ internal class Program
         Console.WriteLine("  dotnet run --project AIOMux.Local -- runs list");
         Console.WriteLine("  dotnet run --project AIOMux.Local -- runs replay <runId>");
         Console.WriteLine("  dotnet run --project AIOMux.Local -- demo notes add --text \"Demo note\" --replay");
+        Console.WriteLine("  dotnet run --project AIOMux.Local -- gauntlet rag-poison-exfil");
     }
 }

@@ -50,17 +50,12 @@ public class AgentRuntime : IAgentRuntime
                 return new AgentRuntimeResult { Success = false, Error = error };
             }
 
-            if (request.Context == null)
-            {
-                var error = "Request context cannot be null";
-                _logger.LogError(error);
-                return new AgentRuntimeResult { Success = false, Error = error };
-            }
+            var context = request.Context ?? new AgentContext();
 
-            // Set up ToolDispatcher if event sink is available
-            if (_eventSink != null)
+            // Host-provided dispatchers take precedence; only create a default when missing.
+            if (_eventSink != null && context.ToolDispatcher == null)
             {
-                request.Context.ToolDispatcher = new ToolDispatcher(_eventSink);
+                context.ToolDispatcher = new ToolDispatcher(_eventSink);
             }
 
             // Emit RunStarted event if sink is provided
@@ -71,24 +66,10 @@ public class AgentRuntime : IAgentRuntime
                     Payload = new RunStartedEvent.RunStartedPayload
                     {
                         PipelineName = request.AgentName ?? request.ChainName ?? "unknown",
-                        WorkingDirectory = request.Context?.WorkingDirectory
+                        WorkingDirectory = context.WorkingDirectory
                     }
                 };
                 await _eventSink.RecordAsync(startedEvent, cancellationToken);
-            }
-            // Validate request
-            if (request == null)
-            {
-                var error = "Request cannot be null";
-                _logger.LogError(error);
-                return new AgentRuntimeResult { Success = false, Error = error };
-            }
-
-            if (request.Context == null)
-            {
-                var error = "Request context cannot be null";
-                _logger.LogError(error);
-                return new AgentRuntimeResult { Success = false, Error = error };
             }
 
             // Exactly one of AgentName or ChainName must be specified
@@ -115,11 +96,11 @@ public class AgentRuntime : IAgentRuntime
             AgentRuntimeResult result;
             if (agentNameSet)
             {
-                result = await ExecuteAgentAsync(request.AgentName!, request.Context, cancellationToken);
+                result = await ExecuteAgentAsync(request.AgentName!, context, cancellationToken);
             }
             else
             {
-                result = await ExecuteChainAsync(request.ChainName!, request.Context, cancellationToken);
+                result = await ExecuteChainAsync(request.ChainName!, context, cancellationToken);
             }
 
             // Emit RunFinished event if sink is provided

@@ -104,22 +104,35 @@ public class ReplayEngine
     {
         try
         {
-            var baseEvent = JsonSerializer.Deserialize<RuntimeEvent>(json);
-            if (baseEvent == null)
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("Type", out var typeElement)
+                || typeElement.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            var eventType = typeElement.GetString();
+            if (string.IsNullOrWhiteSpace(eventType))
             {
                 return null;
             }
 
             // Deserialize based on type
-            return baseEvent.Type switch
+            return eventType switch
             {
                 "RunStarted" => JsonSerializer.Deserialize<RunStartedEvent>(json),
                 "InputReceived" => JsonSerializer.Deserialize<InputReceivedEvent>(json),
                 "StepCompleted" => JsonSerializer.Deserialize<StepCompletedEvent>(json),
+                "StepStarted" => JsonSerializer.Deserialize<StepStartedEvent>(json),
+                "StepFailed" => JsonSerializer.Deserialize<StepFailedEvent>(json),
                 "ToolInvoked" => JsonSerializer.Deserialize<ToolInvokedEvent>(json),
+                "ToolProposed" => JsonSerializer.Deserialize<Replay.Models.ToolProposedEvent>(json),
+                "PolicyEvaluated" => JsonSerializer.Deserialize<Replay.Models.PolicyEvaluatedEvent>(json),
+                "ToolExecuted" => JsonSerializer.Deserialize<Replay.Models.ToolExecutedEvent>(json),
                 "ToolResult" => JsonSerializer.Deserialize<Replay.Models.ToolResultEvent>(json),
+                "RetrievalCompleted" => JsonSerializer.Deserialize<RetrievalCompletedEvent>(json),
                 "RunFinished" => JsonSerializer.Deserialize<RunFinishedEvent>(json),
-                _ => baseEvent
+                _ => null
             };
         }
         catch
