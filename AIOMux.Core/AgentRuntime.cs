@@ -40,6 +40,7 @@ public class AgentRuntime : IAgentRuntime
     /// <returns>Structured result with success status, output, and optional error details.</returns>
     public async Task<AgentRuntimeResult> RunAsync(AgentRunRequest request, CancellationToken cancellationToken = default)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             // Validate request
@@ -113,7 +114,7 @@ public class AgentRuntime : IAgentRuntime
                         Success = result.Success,
                         FinalOutput = result.Output,
                         Error = result.Error,
-                        TotalDurationMs = 0 // Duration not tracked here
+                        TotalDurationMs = stopwatch.Elapsed.TotalMilliseconds
                     }
                 };
                 await _eventSink.RecordAsync(finishedEvent, cancellationToken);
@@ -133,7 +134,7 @@ public class AgentRuntime : IAgentRuntime
                         Success = false,
                         FinalOutput = null,
                         Error = error,
-                        TotalDurationMs = 0
+                        TotalDurationMs = stopwatch.Elapsed.TotalMilliseconds
                     }
                 };
                 await _eventSink.RecordAsync(finishedEvent, cancellationToken);
@@ -153,7 +154,7 @@ public class AgentRuntime : IAgentRuntime
                         Success = false,
                         FinalOutput = null,
                         Error = error,
-                        TotalDurationMs = 0
+                        TotalDurationMs = stopwatch.Elapsed.TotalMilliseconds
                     }
                 };
                 await _eventSink.RecordAsync(finishedEvent, CancellationToken.None);

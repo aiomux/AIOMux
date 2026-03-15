@@ -67,46 +67,6 @@ public class AgentChainModel
     }
 
     /// <summary>
-    /// Saves the chain model to a JSON file.
-    /// </summary>
-    /// <param name="filePath">Path where the JSON file will be saved</param>
-    /// <exception cref="ArgumentException">Thrown when file path is invalid</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the model is invalid</exception>
-    public async Task SaveToFileAsync(string filePath)
-    {
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
-        }
-
-        // Validate before saving
-        if (!Validate(out var errors))
-        {
-            throw new InvalidOperationException($"Cannot save invalid chain: {string.Join(", ", errors)}");
-        }
-
-        try
-        {
-            // Ensure directory exists
-            var directory = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            using var fileStream = File.Create(filePath);
-            await JsonSerializer.SerializeAsync(fileStream, this, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"Failed to save chain to {filePath}: {ex.Message}", ex);
-        }
-    }
-
-    /// <summary>
     /// Validates the chain model to ensure all steps are properly configured.
     /// </summary>
     /// <param name="errors">List of validation errors found</param>
@@ -278,32 +238,6 @@ public class AgentChainModel
 
         recursionStack.Remove(node);
         return false;
-    }
-
-    /// <summary>
-    /// Creates a copy of this chain model.
-    /// </summary>
-    /// <returns>A deep copy of the chain model</returns>
-    public AgentChainModel Clone()
-    {
-        var json = JsonSerializer.Serialize(this);
-        return JsonSerializer.Deserialize<AgentChainModel>(json)
-               ?? throw new InvalidOperationException("Failed to clone chain model");
-    }
-
-    /// <summary>
-    /// Gets a summary of the chain for logging/display purposes.
-    /// </summary>
-    /// <returns>A formatted summary string</returns>
-    public string GetSummary()
-    {
-        var summary = $"Chain: {Name}";
-        if (!string.IsNullOrEmpty(Description))
-        {
-            summary += $" - {Description}";
-        }
-        summary += $" ({Steps.Count} steps)";
-        return summary;
     }
 }
 

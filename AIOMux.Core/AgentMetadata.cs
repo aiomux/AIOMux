@@ -1,7 +1,7 @@
 namespace AIOMux.Core;
 
 /// <summary>
-/// Metadata describing an agent, including name, description, version, and supported features.
+/// Metadata describing an agent, including name, description, and version.
 /// </summary>
 public class AgentMetadata
 {
@@ -26,27 +26,7 @@ public class AgentMetadata
     public string? AssemblyPath { get; set; }
 
     /// <summary>
-    /// When the agent was last updated.
-    /// </summary>
-    public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
-
-    /// <summary>
     /// Gets or sets the list of supported tasks.
     /// </summary>
     public List<string> SupportedTasks { get; set; } = new();
-
-    /// <summary>
-    /// Gets or sets the list of supported languages.
-    /// </summary>
-    public List<string> SupportedLanguages { get; set; } = new();
-
-    /// <summary>
-    /// Gets or sets the input formats supported by the agent.
-    /// </summary>
-    public List<string> InputFormats { get; set; } = new();
-
-    /// <summary>
-    /// Gets or sets the output formats supported by the agent.
-    /// </summary>
-    public List<string> OutputFormats { get; set; } = new();
 }

@@ -323,14 +323,11 @@ public class AgentOrchestrator
     }
 
     /// <summary>
-    /// Executes a chain of agents with the given context and optional metrics collection.
+    /// Executes a chain of agents with the given context and optional summary generation.
     /// </summary>
-    /// <param name="chainModel">The chain model to execute.</param>
-    /// <param name="context">The context for execution.</param>
-    /// <param name="generateSummary">Whether to generate a job summary.</param>
-    /// <returns>The final output from chain execution or job summary based on parameters.</returns>
-    public async Task<string> ExecuteChainAsync(AgentChainModel chainModel, AgentContext context, bool generateSummary)
+    public async Task<string> ExecuteChainAsync(AgentChainModel chainModel, AgentContext context, bool generateSummary = true)
     {
+        context.Options.GenerateJobSummary = generateSummary;
         var result = await ExecuteChainResultAsync(chainModel, context);
 
         if (!result.Success)
@@ -429,11 +426,7 @@ public class AgentOrchestrator
     /// <summary>
     /// Loads and executes a chain from a JSON file with optional summary generation.
     /// </summary>
-    /// <param name="filePath">The path to the JSON file containing the chain definition.</param>
-    /// <param name="context">The context for execution.</param>
-    /// <param name="generateSummary">Whether to generate a summary of the execution.</param>
-    /// <returns>The result of executing the chain.</returns>
-    public async Task<string> ExecuteChainFromFileAsync(string filePath, AgentContext context, bool generateSummary)
+    public async Task<string> ExecuteChainFromFileAsync(string filePath, AgentContext context, bool generateSummary = true)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {

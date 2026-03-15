@@ -23,9 +23,7 @@ public class NotesSkillPlugin : IAgentPlugin
             "Search notes",
             "Classify notes (note/task/idea/reference)",
             "Extract tags and entities"
-        },
-        InputFormats = new List<string> { "text" },
-        SupportedLanguages = new List<string> { "en" }
+        }
     };
 
     public async Task<bool> InitializeAsync(Dictionary<string, object>? configuration = null)

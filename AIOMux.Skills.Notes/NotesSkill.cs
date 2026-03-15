@@ -15,7 +15,6 @@ namespace AIOMux.Skills.Notes;
 public class NotesSkill : IAgent
 {
     private readonly INotesStore _store;
-    private readonly List<string> _eventLog = new();
 
     public string Name => "NotesSkill";
 
@@ -38,7 +37,7 @@ public class NotesSkill : IAgent
             var input = context.UserInput.Trim();
 
             // Emit event: input received
-            EmitEvent("InputReceived", new { input, hash = ComputeHash(input) });
+            EmitEvent("InputReceived", new { input });
 
             // Check for search command
             if (input.StartsWith("search", StringComparison.OrdinalIgnoreCase))
@@ -148,16 +147,7 @@ public class NotesSkill : IAgent
         };
 
         var json = JsonSerializer.Serialize(eventData);
-        _eventLog.Add(json);
-
-        // For debugging - can be removed or made optional
         Console.WriteLine($"[NotesSkill Event] {step}: {json}");
-    }
-
-    private string ComputeHash(string input)
-    {
-        // Simple hash for replay
-        return input.GetHashCode().ToString("X");
     }
 
     private string FormatNoteAdded(NoteRecord note)
@@ -203,9 +193,4 @@ public class NotesSkill : IAgent
 
         return output;
     }
-
-    /// <summary>
-    /// Get event log for replay/testing.
-    /// </summary>
-    public List<string> GetEventLog() => new(_eventLog);
 }

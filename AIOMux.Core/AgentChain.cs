@@ -16,16 +16,6 @@ public class AgentChain : IAgent
     public string Name { get; set; }
 
     /// <summary>
-    /// Gets or sets the list of agent names in the chain.
-    /// </summary>
-    public List<string> Agents { get; set; }
-
-    /// <summary>
-    /// Gets or sets the execution mode (sequential/parallel).
-    /// </summary>
-    public string Mode { get; set; }
-
-    /// <summary>
     /// Creates a new agent chain with the specified name.
     /// </summary>
     /// <param name="name">Unique name for this chain</param>
