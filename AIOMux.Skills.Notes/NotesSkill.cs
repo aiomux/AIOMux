@@ -12,7 +12,7 @@ namespace AIOMux.Skills.Notes;
 /// Pipeline: NormalizeInput -> Classify -> Summarize -> ExtractMetadata -> Persist
 /// Only allowed to use NotesStore tool.
 /// </summary>
-public class NotesSkill : IAgent
+public class NotesSkill : ICancellableAgent
 {
     private readonly INotesStore _store;
 
@@ -23,10 +23,17 @@ public class NotesSkill : IAgent
         _store = store ?? throw new ArgumentNullException(nameof(store));
     }
 
-    public async Task<string> ExecuteAsync(AgentContext context)
+    public Task<string> ExecuteAsync(AgentContext context)
+    {
+        return ExecuteAsync(context, CancellationToken.None);
+    }
+
+    public async Task<string> ExecuteAsync(AgentContext context, CancellationToken cancellationToken)
     {
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             // Enforce permission: only NotesStore tool allowed
             if (context.Tools.Count > 1 || (context.Tools.Count == 1 && !context.Tools.ContainsKey("NotesStore")))
             {
@@ -39,21 +46,23 @@ public class NotesSkill : IAgent
             // Emit event: input received
             EmitEvent("InputReceived", new { input });
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             // Check for search command
             if (input.StartsWith("search", StringComparison.OrdinalIgnoreCase))
             {
-                return await HandleSearchAsync(input);
+                return await HandleSearchAsync(input, cancellationToken);
             }
 
             // Check for list command
             if (input.Equals("list", StringComparison.OrdinalIgnoreCase) ||
                 input.Equals("all", StringComparison.OrdinalIgnoreCase))
             {
-                return await HandleListAsync();
+                return await HandleListAsync(cancellationToken);
             }
 
             // Default: add note
-            return await HandleAddNoteAsync(input);
+            return await HandleAddNoteAsync(input, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -61,8 +70,10 @@ public class NotesSkill : IAgent
         }
     }
 
-    private async Task<string> HandleAddNoteAsync(string text)
+    private async Task<string> HandleAddNoteAsync(string text, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Step 1: Normalize
         var noteInput = new NoteInput
         {
@@ -74,6 +85,8 @@ public class NotesSkill : IAgent
         noteInput = NormalizeStep.Execute(noteInput);
         EmitEvent("Normalized", new { text = noteInput.Text });
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Step 2: Classify
         var noteType = ClassifyStep.Execute(noteInput.Text);
         EmitEvent("Classified", new { type = noteType });
@@ -82,9 +95,13 @@ public class NotesSkill : IAgent
         var (title, summary) = SummarizeStep.Execute(noteInput.Text);
         EmitEvent("Summarized", new { title, summary });
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Step 4: Extract Metadata
         var (tags, entities) = ExtractMetadataStep.Execute(noteInput.Text);
         EmitEvent("MetadataExtracted", new { tags, entities });
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         // Step 5: Persist
         var record = new NoteRecord
@@ -106,8 +123,10 @@ public class NotesSkill : IAgent
         return FormatNoteAdded(record);
     }
 
-    private async Task<string> HandleSearchAsync(string input)
+    private async Task<string> HandleSearchAsync(string input, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Parse search query
         var queryText = input.Substring("search".Length).Trim();
 
@@ -121,17 +140,20 @@ public class NotesSkill : IAgent
 
         var results = await _store.SearchAsync(query);
 
+        cancellationToken.ThrowIfCancellationRequested();
         EmitEvent("SearchCompleted", new { count = results.Count });
 
         return FormatSearchResults(results);
     }
 
-    private async Task<string> HandleListAsync()
+    private async Task<string> HandleListAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         EmitEvent("ListRequested", new { });
 
         var results = await _store.GetAllAsync();
 
+        cancellationToken.ThrowIfCancellationRequested();
         EmitEvent("ListCompleted", new { count = results.Count });
 
         return FormatSearchResults(results);
