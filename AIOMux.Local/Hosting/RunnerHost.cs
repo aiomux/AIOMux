@@ -1,6 +1,10 @@
+using AIOMux.Clients;
 using AIOMux.Core;
 using AIOMux.Core.Interfaces;
+using AIOMux.Core.Memory;
 using AIOMux.Core.Models;
+using AIOMux.Core.Policy;
+using AIOMux.Core.Replay;
 using AIOMux.Local.Config;
 using AIOMux.Local.Security;
 using AIOMux.Local.Skills;
@@ -18,6 +22,8 @@ public class RunnerHost
     private readonly IAgentRuntime _runtime;
     private readonly SkillLoader _skillLoader;
     private readonly PermissionService _permissionService;
+    private readonly IPolicyEngine _policyEngine;
+    private readonly IMemoryStore _memoryStore;
     private readonly string _basePath;
 
     public RunnerHost(string? basePath = null)
@@ -25,8 +31,12 @@ public class RunnerHost
         _basePath = basePath ?? Directory.GetCurrentDirectory();
         _config = ConfigLoader.Load(_basePath);
         _permissionService = new PermissionService(_config.Permissions);
+        _policyEngine = new ConfigPermissionPolicyEngine(_permissionService);
+        _memoryStore = new JsonFileMemoryStore(Path.Combine(_basePath, "sandbox", "memory.json"));
         _skillLoader = new SkillLoader(Path.Combine(_basePath, _config.SkillsPath));
         _agentManager = new AgentManager();
+        var plannerLlm = CreatePlannerClient();
+        _agentManager.Register(new PlannerAgent(plannerLlm));
         var orchestrator = new AgentOrchestrator(_agentManager);
         _runtime = new AgentRuntime(_agentManager, orchestrator);
     }
@@ -44,6 +54,13 @@ public class RunnerHost
         if (_agentManager.GetAllAgents().Count == 0)
         {
             Console.WriteLine("No agents loaded. Add skill plugins to the skills directory.");
+        }
+
+        var configured = _config.DefaultAgentName;
+        var effective = ResolveDefaultAgentName();
+        if (!configured.Equals(effective, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine($"Configured default agent '{configured}' not found. Falling back to '{effective}'.");
         }
 
         PrintBanner();
@@ -136,12 +153,14 @@ public class RunnerHost
             {
                 UserInput = input,
                 WorkingDirectory = _basePath,
-                AgentManager = _agentManager
+                AgentManager = _agentManager,
+                Memory = _memoryStore,
+                ToolDispatcher = new ToolDispatcher(new NullRuntimeEventSink(), _policyEngine)
             };
 
             var request = new AgentRunRequest
             {
-                AgentName = _config.DefaultAgentName,
+                AgentName = ResolveDefaultAgentName(),
                 Context = context
             };
 
@@ -160,6 +179,39 @@ public class RunnerHost
         {
             return $"Error during execution: {ex.Message}";
         }
+    }
+
+    private string ResolveDefaultAgentName()
+    {
+        var configured = _config.DefaultAgentName;
+        if (_agentManager.GetByName(configured) != null)
+        {
+            return configured;
+        }
+
+        var nonPlanner = _agentManager.GetAllAgents()
+            .FirstOrDefault(a => !a.Name.Equals("PlannerAgent", StringComparison.OrdinalIgnoreCase));
+        if (nonPlanner != null)
+        {
+            return nonPlanner.Name;
+        }
+
+        if (_agentManager.GetByName("PlannerAgent") != null)
+        {
+            return "PlannerAgent";
+        }
+
+        return configured;
+    }
+
+    private ILLMClient? CreatePlannerClient()
+    {
+        if (_config.Model.Provider.Equals("ollama", StringComparison.OrdinalIgnoreCase))
+        {
+            return new OllamaClient(_config.Model.ModelName);
+        }
+
+        return null;
     }
 
     /// <summary>
