@@ -306,6 +306,7 @@ public class AgentRuntime : IAgentRuntime
     /// <returns>Structured result with success status, output, and optional error details.</returns>
     public async Task<AgentRuntimeResult> ForkAsync(AgentForkRequest request, CancellationToken cancellationToken = default)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             if (request == null)
@@ -315,9 +316,33 @@ public class AgentRuntime : IAgentRuntime
                 return new AgentRuntimeResult { Success = false, Error = error };
             }
 
+            if (string.IsNullOrWhiteSpace(request.SourceRunId))
+            {
+                var error = "SourceRunId is required for fork execution";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
             if (request.Context == null)
             {
                 var error = "Fork request context cannot be null";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            var agentNameSet = !string.IsNullOrWhiteSpace(request.AgentName);
+            var chainNameSet = !string.IsNullOrWhiteSpace(request.ChainName);
+
+            if (!agentNameSet && !chainNameSet)
+            {
+                var error = "Either AgentName or ChainName must be specified";
+                _logger.LogError(error);
+                return new AgentRuntimeResult { Success = false, Error = error };
+            }
+
+            if (agentNameSet && chainNameSet)
+            {
+                var error = "Only one of AgentName or ChainName can be specified, not both";
                 _logger.LogError(error);
                 return new AgentRuntimeResult { Success = false, Error = error };
             }
@@ -338,10 +363,24 @@ public class AgentRuntime : IAgentRuntime
 
             var newRunId = Guid.NewGuid().ToString();
             request.Context.Variables["runId"] = newRunId;
+            request.Context.Variables["fork.sourceRunId"] = request.SourceRunId;
+            request.Context.Variables["fork.eventIndex"] = request.EventIndex;
             request.Context.ReplayMode = request.ReplayMode;
-            request.Context.ReplaySource = request.ReplayMode == ReplayMode.None
-                ? null
-                : ForkReplayHelper.BuildReplaySource(request.SourceRunId, newRunId);
+
+            if (request.ReplayMode == ReplayMode.None)
+            {
+                request.Context.ReplaySource = null;
+            }
+            else
+            {
+                request.Context.ReplaySource = ForkReplayHelper.BuildReplaySource(request.SourceRunId, newRunId, request.EventIndex);
+                if (request.Context.ReplaySource == null)
+                {
+                    var error = $"Unable to build replay source for run '{request.SourceRunId}'";
+                    _logger.LogError(error);
+                    return new AgentRuntimeResult { Success = false, Error = error };
+                }
+            }
 
             if (_eventSink != null || request.PolicyEngine != null)
             {
@@ -356,27 +395,10 @@ public class AgentRuntime : IAgentRuntime
                     Payload = new RunStartedEvent.RunStartedPayload
                     {
                         PipelineName = request.AgentName ?? request.ChainName ?? "unknown",
-                        WorkingDirectory = request.Context?.WorkingDirectory
+                        WorkingDirectory = request.Context.WorkingDirectory
                     }
                 };
                 await _eventSink.RecordAsync(startedEvent, cancellationToken);
-            }
-
-            var agentNameSet = !string.IsNullOrWhiteSpace(request.AgentName);
-            var chainNameSet = !string.IsNullOrWhiteSpace(request.ChainName);
-
-            if (!agentNameSet && !chainNameSet)
-            {
-                var error = "Either AgentName or ChainName must be specified";
-                _logger.LogError(error);
-                return new AgentRuntimeResult { Success = false, Error = error };
-            }
-
-            if (agentNameSet && chainNameSet)
-            {
-                var error = "Only one of AgentName or ChainName can be specified, not both";
-                _logger.LogError(error);
-                return new AgentRuntimeResult { Success = false, Error = error };
             }
 
             AgentRuntimeResult result;
@@ -398,7 +420,7 @@ public class AgentRuntime : IAgentRuntime
                         Success = result.Success,
                         FinalOutput = result.Output,
                         Error = result.Error,
-                        TotalDurationMs = 0
+                        TotalDurationMs = stopwatch.Elapsed.TotalMilliseconds
                     }
                 };
                 await _eventSink.RecordAsync(finishedEvent, cancellationToken);
@@ -419,7 +441,7 @@ public class AgentRuntime : IAgentRuntime
                         Success = false,
                         FinalOutput = null,
                         Error = error,
-                        TotalDurationMs = 0
+                        TotalDurationMs = stopwatch.Elapsed.TotalMilliseconds
                     }
                 };
                 await _eventSink.RecordAsync(finishedEvent, cancellationToken);
@@ -439,7 +461,7 @@ public class AgentRuntime : IAgentRuntime
                         Success = false,
                         FinalOutput = null,
                         Error = error,
-                        TotalDurationMs = 0
+                        TotalDurationMs = stopwatch.Elapsed.TotalMilliseconds
                     }
                 };
                 await _eventSink.RecordAsync(finishedEvent, CancellationToken.None);

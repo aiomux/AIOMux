@@ -63,7 +63,7 @@ internal static class ForkReplayHelper
         return true;
     }
 
-    public static IReplaySource? BuildReplaySource(string sourceRunId, string newRunId)
+    public static IReplaySource? BuildReplaySource(string sourceRunId, string newRunId, int upToEventIndex = int.MaxValue)
     {
         var filePath = GetRunFilePath(sourceRunId);
         if (!File.Exists(filePath))
@@ -74,6 +74,7 @@ internal static class ForkReplayHelper
         var replaySource = new InMemoryReplaySource();
         var callIdMap = new Dictionary<string, string>(StringComparer.Ordinal);
         int? currentStepIndex = null;
+        var fallbackIndex = 0;
 
         foreach (var line in File.ReadLines(filePath))
         {
@@ -83,6 +84,17 @@ internal static class ForkReplayHelper
             }
 
             using var doc = JsonDocument.Parse(line);
+            var eventIndex = doc.RootElement.TryGetProperty("Seq", out var seqElement) && seqElement.ValueKind == JsonValueKind.Number
+                ? seqElement.GetInt32()
+                : fallbackIndex;
+
+            fallbackIndex++;
+
+            if (eventIndex > upToEventIndex)
+            {
+                continue;
+            }
+
             if (!doc.RootElement.TryGetProperty("Type", out var typeElement))
             {
                 continue;
