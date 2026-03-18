@@ -4,7 +4,7 @@
     "Provider": "ollama",
     "BaseUrl": null,
     "ApiKeyEnvVar": null,
-    "ModelName": "llama3"
+    "ModelName": "llama3.1"
   },
   "SkillsPath": "./skills",
   "SolutionsPath": null,

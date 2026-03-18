@@ -53,12 +53,6 @@ public class AgentRuntime : IAgentRuntime
 
             var context = request.Context ?? new AgentContext();
 
-            // Host-provided dispatchers take precedence; only create a default when missing.
-            if (_eventSink != null && context.ToolDispatcher == null)
-            {
-                context.ToolDispatcher = new ToolDispatcher(_eventSink);
-            }
-
             // Emit RunStarted event if sink is provided
             if (_eventSink != null)
             {
