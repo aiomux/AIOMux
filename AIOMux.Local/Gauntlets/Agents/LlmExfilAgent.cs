@@ -161,7 +161,7 @@ internal sealed class LlmExfilAgent : ICancellableAgent
             // No matching close brace found — stop.
             yield break;
 
-            nextObject:;
+        nextObject:;
         }
     }
 
