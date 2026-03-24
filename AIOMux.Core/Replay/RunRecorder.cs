@@ -67,9 +67,6 @@ public class RunRecorder : IDisposable
                 Payload = new RunStartedEvent.RunStartedPayload
                 {
                     PipelineName = run.PipelineName,
-                    PipelineVersion = run.PipelineVersion,
-                    ModelConfigHash = run.ModelConfigHash,
-                    PermissionsSnapshot = run.PermissionsSnapshot,
                     WorkingDirectory = run.WorkingDirectory
                 }
             };

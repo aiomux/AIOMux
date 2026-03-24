@@ -54,9 +54,6 @@ public class RunStartedEvent : RuntimeEvent
     public class RunStartedPayload
     {
         public string PipelineName { get; set; } = string.Empty;
-        public string? PipelineVersion { get; set; }
-        public string? ModelConfigHash { get; set; }
-        public Dictionary<string, string> PermissionsSnapshot { get; set; } = new();
         public string? WorkingDirectory { get; set; }
     }
 }
@@ -79,27 +76,6 @@ public class InputReceivedEvent : RuntimeEvent
 }
 
 /// <summary>
-/// Event indicating a pipeline step completed.
-/// </summary>
-public class StepCompletedEvent : RuntimeEvent
-{
-    public StepCompletedEvent()
-    {
-        Type = "StepCompleted";
-    }
-
-    public class StepCompletedPayload
-    {
-        public string RunId { get; set; } = string.Empty;
-        public int StepIndex { get; set; }
-        public string AgentName { get; set; } = string.Empty;
-        public string StepName { get; set; } = string.Empty;
-        public string Output { get; set; } = string.Empty;
-        public string OutputHash { get; set; } = string.Empty;
-        public double DurationMs { get; set; }
-    }
-}
-/// <summary>
 /// Event indicating a step started.
 /// </summary>
 public class StepStartedEvent : RuntimeEvent
@@ -113,7 +89,29 @@ public class StepStartedEvent : RuntimeEvent
     {
         public string RunId { get; set; } = string.Empty;
         public int StepIndex { get; set; }
-        public string AgentName { get; set; } = string.Empty;
+        public string StepTarget { get; set; } = string.Empty;
+    }
+}
+
+/// <summary>
+/// Event indicating a pipeline step completed.
+/// </summary>
+public class StepCompletedEvent : RuntimeEvent
+{
+    public StepCompletedEvent()
+    {
+        Type = "StepCompleted";
+    }
+
+    public class StepCompletedPayload
+    {
+        public string RunId { get; set; } = string.Empty;
+        public int StepIndex { get; set; }
+        public string StepTarget { get; set; } = string.Empty;
+        public string StepName { get; set; } = string.Empty;
+        public string Output { get; set; } = string.Empty;
+        public string OutputHash { get; set; } = string.Empty;
+        public double DurationMs { get; set; }
     }
 }
 
@@ -131,47 +129,8 @@ public class StepFailedEvent : RuntimeEvent
     {
         public string RunId { get; set; } = string.Empty;
         public int StepIndex { get; set; }
-        public string AgentName { get; set; } = string.Empty;
+        public string StepTarget { get; set; } = string.Empty;
         public string ExceptionMessage { get; set; } = string.Empty;
-    }
-}
-
-/// <summary>
-/// Event indicating a tool was invoked.
-/// </summary>
-public class ToolInvokedEvent : RuntimeEvent
-{
-    public ToolInvokedEvent()
-    {
-        Type = "ToolInvoked";
-    }
-
-    public class ToolInvokedPayload
-    {
-        public string ToolName { get; set; } = string.Empty;
-        public string Args { get; set; } = string.Empty;
-        public string ArgsHash { get; set; } = string.Empty;
-    }
-}
-
-/// <summary>
-/// Event indicating a tool returned a result.
-/// </summary>
-public class ToolResultEvent : RuntimeEvent
-{
-    public ToolResultEvent()
-    {
-        Type = "ToolResult";
-    }
-
-    public class ToolResultPayload
-    {
-        public string ToolName { get; set; } = string.Empty;
-        public string Result { get; set; } = string.Empty;
-        public string ResultHash { get; set; } = string.Empty;
-        public double DurationMs { get; set; }
-        public bool Success { get; set; } = true;
-        public string? Error { get; set; }
     }
 }
 

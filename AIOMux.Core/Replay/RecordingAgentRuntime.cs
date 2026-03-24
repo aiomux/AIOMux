@@ -1,5 +1,6 @@
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
+using AIOMux.Core.Replay;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Security.Cryptography;
@@ -44,8 +45,7 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
         {
             var ctx = request.Context ?? new ExecutionContext();
 
-            if (ctx.ToolDispatcher == null)
-                ctx.ToolDispatcher = new ToolDispatcher(this);
+            ctx.ToolDispatcher = new ToolDispatcher(this);
 
             var run = new Run
             {
@@ -58,16 +58,20 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
             runId = await _recorder.StartRunAsync(run);
             ctx.RunId = runId;
 
+            var initialInput = ctx.Inputs.TryGetValue("input", out var v) ? v?.ToString() ?? string.Empty : string.Empty;
+
             await _recorder.RecordEventAsync(new InputReceivedEvent
             {
                 Payload = new InputReceivedEvent.InputReceivedPayload
                 {
-                    Input = ctx.UserInput,
-                    InputHash = ComputeHash(ctx.UserInput)
+                    Input = initialInput,
+                    InputHash = ComputeHash(initialInput)
                 }
             });
 
-            var result = await _innerRuntime.RunAsync(request, cancellationToken);
+            var result = await _innerRuntime.RunAsync(
+                new ExecutionRunRequest { Plan = request.Plan, Context = ctx },
+                cancellationToken);
 
             sw.Stop();
             await _recorder.FinishRunAsync(result.Success, result.Output, result.Error, sw.Elapsed.TotalMilliseconds);
@@ -127,12 +131,14 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
 
             runId = await _recorder.StartRunAsync(run);
 
+            var initialInput = ctx.Inputs.TryGetValue("input", out var v) ? v?.ToString() ?? string.Empty : string.Empty;
+
             await _recorder.RecordEventAsync(new InputReceivedEvent
             {
                 Payload = new InputReceivedEvent.InputReceivedPayload
                 {
-                    Input = ctx.UserInput,
-                    InputHash = ComputeHash(ctx.UserInput)
+                    Input = initialInput,
+                    InputHash = ComputeHash(initialInput)
                 }
             });
 

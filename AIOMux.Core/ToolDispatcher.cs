@@ -15,7 +15,10 @@ public class ToolDispatcher : IToolDispatcher
         _policyEngine = policyEngine ?? new AllowAllPolicyEngine();
     }
 
-    public async Task<ToolResult> InvokeAsync(ToolCall call, ExecutionContext context, CancellationToken ct = default)
+    public async Task<ToolResult> InvokeAsync(
+        ToolCall call,
+        ExecutionContext context,
+        CancellationToken ct = default)
     {
         // Check cancellation at the start
         ct.ThrowIfCancellationRequested();
@@ -56,11 +59,7 @@ public class ToolDispatcher : IToolDispatcher
                 Error = policyDecision.DenyReason ?? "Tool call denied by policy.",
                 JsonResult = string.Empty
             };
-            await _eventSink.RecordAsync(
-                new Replay.Models.ToolResultEvent
-                {
-                    Result = deniedResult
-                }, ct);
+            await _eventSink.RecordAsync(new Replay.Models.ToolResultEvent { Result = deniedResult }, ct);
             return deniedResult;
         }
 
@@ -130,11 +129,7 @@ public class ToolDispatcher : IToolDispatcher
             }, ct);
 
         // 5. ToolResult event
-        await _eventSink.RecordAsync(
-            new Replay.Models.ToolResultEvent
-            {
-                Result = result
-            }, ct);
+        await _eventSink.RecordAsync(new Replay.Models.ToolResultEvent { Result = result }, ct);
 
         return result;
     }

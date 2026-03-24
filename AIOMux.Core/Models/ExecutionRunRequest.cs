@@ -8,6 +8,6 @@ public sealed record ExecutionRunRequest
     /// <summary>The plan to execute.</summary>
     public ExecutionPlan Plan { get; init; } = default!;
 
-    /// <summary>The runtime context carrying state, tools, and dependencies.</summary>
+    /// <summary>The context carrying run identity, inputs, state, records, and runtime dependencies.</summary>
     public ExecutionContext Context { get; init; } = default!;
 }

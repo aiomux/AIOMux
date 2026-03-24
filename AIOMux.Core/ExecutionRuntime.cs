@@ -25,7 +25,7 @@ public class ExecutionRuntime : IExecutionRuntime
         _eventSink = eventSink;
     }
 
-    // ── RunAsync ─────────────────────────────────────────────────────────────
+    // ── RunAsync ──────────────────────────────────────────────────────────────
 
     public async Task<ExecutionResult> RunAsync(ExecutionRunRequest request, CancellationToken cancellationToken = default)
     {
@@ -42,8 +42,11 @@ public class ExecutionRuntime : IExecutionRuntime
             var plan = request.Plan;
             var ctx = request.Context;
 
+            // Seed State["input"] and preserve the original entry input
+            if (!ctx.State.ContainsKey("input"))
+                ctx.State["input"] = ctx.Inputs.TryGetValue("input", out var entry) ? entry?.ToString() ?? string.Empty : string.Empty;
             if (!ctx.State.ContainsKey("user.input.original"))
-                ctx.State["user.input.original"] = ctx.UserInput;
+                ctx.State["user.input.original"] = ctx.State["input"];
 
             await EmitAsync(new RunStartedEvent
             {
@@ -71,7 +74,7 @@ public class ExecutionRuntime : IExecutionRuntime
                     {
                         RunId = ctx.RunId,
                         StepIndex = i,
-                        AgentName = step.Target
+                        StepTarget = step.Target
                     }
                 }, cancellationToken);
 
@@ -81,11 +84,15 @@ public class ExecutionRuntime : IExecutionRuntime
                 try
                 {
                     ApplyBindings(step, ctx);
-                    output = await ExecuteStepAsync(step, ctx, cancellationToken);
+                    var stepResult = await ExecuteStepAsync(step, ctx, cancellationToken);
                     stepSw.Stop();
 
+                    output = stepResult.Output;
                     var outputKey = step.OutputKey ?? step.Target;
                     ctx.State[outputKey] = output;
+
+                    foreach (var (key, value) in stepResult.Outputs)
+                        ctx.State[key] = value;
 
                     ctx.Records.Add(new ExecutionRecord
                     {
@@ -93,7 +100,7 @@ public class ExecutionRuntime : IExecutionRuntime
                         StepId = step.Id,
                         Type = step.Type,
                         Target = step.Target,
-                        Input = ctx.UserInput,
+                        Input = ctx.GetInput(),
                         Output = output,
                         Success = true,
                         Timestamp = stepStart,
@@ -106,7 +113,7 @@ public class ExecutionRuntime : IExecutionRuntime
                         {
                             RunId = ctx.RunId,
                             StepIndex = i,
-                            AgentName = step.Target,
+                            StepTarget = step.Target,
                             StepName = outputKey,
                             Output = output,
                             OutputHash = ComputeHash(output),
@@ -114,7 +121,8 @@ public class ExecutionRuntime : IExecutionRuntime
                         }
                     }, cancellationToken);
 
-                    _logger.LogInformation("Step {StepId} ({Target}) completed in {Ms:F1}ms", step.Id, step.Target, stepSw.Elapsed.TotalMilliseconds);
+                    _logger.LogInformation("Step {StepId} ({Target}) completed in {Ms:F1}ms",
+                        step.Id, step.Target, stepSw.Elapsed.TotalMilliseconds);
                 }
                 catch (OperationCanceledException)
                 {
@@ -128,7 +136,7 @@ public class ExecutionRuntime : IExecutionRuntime
                         StepId = step.Id,
                         Type = step.Type,
                         Target = step.Target,
-                        Input = ctx.UserInput,
+                        Input = ctx.GetInput(),
                         Success = false,
                         Error = msg,
                         Timestamp = stepStart,
@@ -151,7 +159,7 @@ public class ExecutionRuntime : IExecutionRuntime
                         StepId = step.Id,
                         Type = step.Type,
                         Target = step.Target,
-                        Input = ctx.UserInput,
+                        Input = ctx.GetInput(),
                         Success = false,
                         Error = ex.Message,
                         Timestamp = stepStart,
@@ -189,7 +197,7 @@ public class ExecutionRuntime : IExecutionRuntime
         }
     }
 
-    // ── ForkAsync ────────────────────────────────────────────────────────────
+    // ── ForkAsync ─────────────────────────────────────────────────────────────
 
     public async Task<ExecutionResult> ForkAsync(ExecutionForkRequest request, CancellationToken cancellationToken = default)
     {
@@ -225,10 +233,11 @@ public class ExecutionRuntime : IExecutionRuntime
                     return Fail($"Unable to build replay source for run '{request.SourceRunId}'");
             }
 
-            var policyEngine = request.PolicyEngine ?? new AllowAllPolicyEngine();
-            ctx.ToolDispatcher = new ToolDispatcher(_eventSink ?? new NullRuntimeEventSink(), policyEngine);
+            ctx.ToolDispatcher = new ToolDispatcher(_eventSink ?? new NullRuntimeEventSink(), request.PolicyEngine ?? new AllowAllPolicyEngine());
 
-            return await RunAsync(new ExecutionRunRequest { Plan = request.Plan, Context = ctx }, cancellationToken);
+            return await RunAsync(
+                new ExecutionRunRequest { Plan = request.Plan, Context = ctx },
+                cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -244,7 +253,7 @@ public class ExecutionRuntime : IExecutionRuntime
         }
     }
 
-    // ── Step execution ───────────────────────────────────────────────────────
+    // ── Step execution ────────────────────────────────────────────────────────
 
     private static void ApplyBindings(ExecutionStep step, ExecutionContext ctx)
     {
@@ -253,28 +262,31 @@ public class ExecutionRuntime : IExecutionRuntime
 
         if (source == "user")
         {
-            ctx.UserInput = ctx.State.TryGetValue("user", out var userVal)
-                ? userVal?.ToString() ?? ctx.UserInput
-                : ctx.UserInput;
+            if (ctx.State.TryGetValue("user", out var userVal) && userVal is not null)
+                ctx.State["input"] = userVal.ToString()!;
         }
         else if (ctx.State.TryGetValue(source, out var stateVal))
         {
-            ctx.UserInput = stateVal?.ToString() ?? string.Empty;
+            ctx.State["input"] = stateVal?.ToString() ?? string.Empty;
         }
     }
 
-    private async Task<string> ExecuteStepAsync(ExecutionStep step, ExecutionContext ctx, CancellationToken ct)
+    private async Task<StepExecutionResult> ExecuteStepAsync(
+        ExecutionStep step,
+        ExecutionContext ctx,
+        CancellationToken ct)
     {
         if (step.Type == "tool")
         {
             var input = step.Inputs.TryGetValue("input", out var inputVal)
-                ? inputVal?.ToString() ?? ctx.UserInput
-                : ctx.UserInput;
+                ? inputVal?.ToString() ?? ctx.GetInput()
+                : ctx.GetInput();
 
             var result = await ctx.ExecuteToolAsync(step.Target, input, ct);
             if (!result.Success)
                 throw new InvalidOperationException(result.Error ?? $"Tool '{step.Target}' failed");
-            return result.JsonResult;
+
+            return new StepExecutionResult { Success = true, Output = result.JsonResult };
         }
 
         if (step.Type == "agent")
@@ -285,17 +297,13 @@ public class ExecutionRuntime : IExecutionRuntime
             var agent = ctx.AgentManager.GetByName(step.Target)
                 ?? throw new InvalidOperationException($"Agent not found: '{step.Target}'");
 
-            if (agent is ICancellableAgent cancellable)
-                return await cancellable.ExecuteAsync(ctx, ct);
-
-            ct.ThrowIfCancellationRequested();
-            return await agent.ExecuteAsync(ctx);
+            return await agent.ExecuteAsync(ctx, ct);
         }
 
         throw new InvalidOperationException($"Unknown step type: '{step.Type}'");
     }
 
-    // ── Summary ──────────────────────────────────────────────────────────────
+    // ── Summary ───────────────────────────────────────────────────────────────
 
     private static string AppendSummary(string output, ExecutionContext ctx, string planName)
     {
@@ -314,7 +322,7 @@ public class ExecutionRuntime : IExecutionRuntime
         return $"{output}\n\n{sb}";
     }
 
-    // ── Event helpers ────────────────────────────────────────────────────────
+    // ── Event helpers ─────────────────────────────────────────────────────────
 
     private async Task EmitAsync(RuntimeEvent evt, CancellationToken ct)
     {
@@ -330,7 +338,7 @@ public class ExecutionRuntime : IExecutionRuntime
             {
                 RunId = runId,
                 StepIndex = stepIndex,
-                AgentName = target,
+                StepTarget = target,
                 ExceptionMessage = message
             }
         }, ct);
@@ -350,7 +358,7 @@ public class ExecutionRuntime : IExecutionRuntime
         }, ct);
     }
 
-    // ── Utilities ────────────────────────────────────────────────────────────
+    // ── Utilities ─────────────────────────────────────────────────────────────
 
     private static string ComputeHash(string input)
     {

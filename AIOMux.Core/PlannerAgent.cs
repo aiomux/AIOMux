@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace AIOMux.Core;
 
 /// <summary>
-/// LLM-backed planner agent that produces dynamic chain JSON.
+/// LLM-backed planner agent that produces dynamic step JSON.
 /// </summary>
 public sealed class PlannerAgent : IAgent
 {
@@ -18,23 +18,25 @@ public sealed class PlannerAgent : IAgent
         _llmClient = llmClient;
     }
 
-    public async Task<string> ExecuteAsync(ExecutionContext context)
+    public async Task<StepExecutionResult> ExecuteAsync(
+        ExecutionContext context,
+        CancellationToken cancellationToken = default)
     {
         var availableAgents = GetAvailableAgents(context);
         if (availableAgents.Count == 0)
-            return "[]";
+            return new StepExecutionResult { Success = true, Output = "[]" };
 
         if (_llmClient == null)
-            return BuildFallbackPlanJson(availableAgents[0]);
+            return new StepExecutionResult { Success = true, Output = BuildFallbackPlanJson(availableAgents[0]) };
 
         var systemPrompt = BuildSystemPrompt(availableAgents);
-        var raw = await _llmClient.CompleteAsync(context.UserInput, systemPrompt);
+        var raw = await _llmClient.CompleteAsync(context.GetInput(), systemPrompt);
         var json = TryExtractJsonArray(raw);
 
         if (TryValidatePlan(json, availableAgents, out var validated))
-            return validated;
+            return new StepExecutionResult { Success = true, Output = validated };
 
-        return BuildFallbackPlanJson(availableAgents[0]);
+        return new StepExecutionResult { Success = true, Output = BuildFallbackPlanJson(availableAgents[0]) };
     }
 
     private static List<string> GetAvailableAgents(ExecutionContext context)

@@ -6,51 +6,51 @@ using AIOMux.Core.Replay;
 namespace AIOMux.Core.Models;
 
 /// <summary>
-/// Holds all state and dependencies for a single execution run.
-/// Replaces the former AgentContext as the canonical runtime context.
+/// First-class runtime context for a single execution run.
+/// Carries identity, entry inputs, mutable state, execution trace, and all runtime dependencies.
 /// </summary>
 public sealed class ExecutionContext
 {
     private IToolDispatcher? _toolDispatcher;
 
-    // ── Identity ────────────────────────────────────────────────────────────
+    // ── Identity ──────────────────────────────────────────────────────────────
 
     /// <summary>Unique identifier for this run.</summary>
     public string RunId { get; set; } = Guid.NewGuid().ToString();
 
-    // ── Input / IO ──────────────────────────────────────────────────────────
+    // ── Entry payload ─────────────────────────────────────────────────────────
 
-    /// <summary>Primary user input for the current step.</summary>
-    public string UserInput { get; set; } = string.Empty;
+    /// <summary>
+    /// Named inputs provided to the plan before execution begins.
+    /// The primary user input is stored under the key <c>"input"</c>.
+    /// </summary>
+    public Dictionary<string, object?> Inputs { get; set; } = new();
 
     /// <summary>Working directory at execution time.</summary>
     public string? WorkingDirectory { get; set; }
 
-    /// <summary>Named inputs provided to the plan before execution begins.</summary>
-    public Dictionary<string, object?> Inputs { get; set; } = new();
-
-    // ── State ───────────────────────────────────────────────────────────────
+    // ── Mutable execution state ───────────────────────────────────────────────
 
     /// <summary>
-    /// Mutable state written by the runtime during execution.
-    /// Stores step outputs (keyed by OutputKey) and tracking variables
-    /// such as "stepIndex" and "user.input.original".
+    /// Mutable key/value state written by the runtime during execution.
+    /// <c>State["input"]</c> holds the resolved step input (updated by bindings).
+    /// Step outputs are stored by <see cref="ExecutionStep.OutputKey"/>.
     /// </summary>
     public Dictionary<string, object?> State { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    // ── Trace ───────────────────────────────────────────────────────────────
+    // ── Execution trace ───────────────────────────────────────────────────────
 
-    /// <summary>Execution records captured during this run.</summary>
-    public List<ExecutionRecord> Records { get; set; } = new();
+    /// <summary>Canonical execution records captured during this run.</summary>
+    public List<ExecutionRecord> Records { get; set; } = [];
 
-    // ── Options ─────────────────────────────────────────────────────────────
+    // ── Execution options ─────────────────────────────────────────────────────
 
     /// <summary>Options controlling execution behavior.</summary>
     public ExecutionOptions Options { get; set; } = new();
 
-    // ── Runtime dependencies ─────────────────────────────────────────────────
+    // ── Runtime dependencies ──────────────────────────────────────────────────
 
-    /// <summary>Tools available to agents during execution.</summary>
+    /// <summary>Tools available to steps during execution.</summary>
     public Dictionary<string, ITool> Tools { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Memory store for persisting data between steps.</summary>
@@ -59,7 +59,7 @@ public sealed class ExecutionContext
     /// <summary>Agent registry used by agent steps and the planner.</summary>
     public IAgentManager? AgentManager { get; set; }
 
-    // ── Replay ───────────────────────────────────────────────────────────────
+    // ── Replay ────────────────────────────────────────────────────────────────
 
     /// <summary>Replay mode for tool execution.</summary>
     public ReplayMode ReplayMode { get; set; } = ReplayMode.None;
@@ -67,7 +67,7 @@ public sealed class ExecutionContext
     /// <summary>Replay source supplying recorded tool results.</summary>
     public IReplaySource? ReplaySource { get; set; }
 
-    // ── Tool dispatch ────────────────────────────────────────────────────────
+    // ── Tool dispatch ─────────────────────────────────────────────────────────
 
     /// <summary>
     /// Tool dispatcher with policy enforcement and event recording.
@@ -75,18 +75,36 @@ public sealed class ExecutionContext
     /// </summary>
     public IToolDispatcher ToolDispatcher
     {
-        get => _toolDispatcher ??= CreateDefaultDispatcher();
+        get => _toolDispatcher ??= new ToolDispatcher(new NullRuntimeEventSink(), new AllowAllPolicyEngine());
         set => _toolDispatcher = value;
     }
 
-    // ── Tool execution helper ────────────────────────────────────────────────
+    // ── Input resolution ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the resolved step input: <c>State["input"]</c> when a binding has set it,
+    /// falling back to the entry payload in <c>Inputs["input"]</c>.
+    /// </summary>
+    public string GetInput() =>
+        (State.TryGetValue("input", out var s) ? s?.ToString() : null)
+        ?? (Inputs.TryGetValue("input", out var i) ? i?.ToString() : null)
+        ?? string.Empty;
+
+    // ── Tool execution ────────────────────────────────────────────────────────
 
     /// <summary>Executes a tool by name, routing through the dispatcher.</summary>
-    public async Task<ToolResult> ExecuteToolAsync(string toolName, string jsonArgs, CancellationToken ct = default)
+    public async Task<ToolResult> ExecuteToolAsync(
+        string toolName,
+        string jsonArgs,
+        CancellationToken ct = default)
     {
-        var callId = GenerateCallId(toolName, jsonArgs);
+        var stepIndex = State.TryGetValue("stepIndex", out var stepIndexValue)
+            ? stepIndexValue?.ToString() ?? string.Empty
+            : string.Empty;
 
-        if (!Tools.TryGetValue(toolName, out _))
+        var callId = DeterministicCallId.Generate(RunId, stepIndex, toolName, jsonArgs);
+
+        if (!Tools.ContainsKey(toolName))
         {
             return new ToolResult
             {
@@ -100,15 +118,4 @@ public sealed class ExecutionContext
         var call = new ToolCall { CallId = callId, ToolName = toolName, JsonArgs = jsonArgs };
         return await ToolDispatcher.InvokeAsync(call, this, ct);
     }
-
-    private string GenerateCallId(string toolName, string jsonArgs)
-    {
-        var stepIndex = State.TryGetValue("stepIndex", out var stepIndexValue)
-            ? stepIndexValue?.ToString() ?? string.Empty
-            : string.Empty;
-        return DeterministicCallId.Generate(RunId, stepIndex, toolName, jsonArgs);
-    }
-
-    private static IToolDispatcher CreateDefaultDispatcher()
-        => new ToolDispatcher(new NullRuntimeEventSink(), new AllowAllPolicyEngine());
 }

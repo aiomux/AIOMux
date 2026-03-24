@@ -50,7 +50,7 @@ public class AgentManager : IAgentManager
         var sb = new StringBuilder();
         foreach (var agent in _agents)
         {
-            // Skip the planner agent itself as it's not meant to be used in chains
+            // Skip the planner agent — it drives plan generation, not plan steps
             if (agent.Name.Contains("Planner", StringComparison.OrdinalIgnoreCase))
                 continue;
 
@@ -67,15 +67,7 @@ public class AgentManager : IAgentManager
     {
         return _agents
             .Where(a => !a.Name.Contains("Planner", StringComparison.OrdinalIgnoreCase))
-            .Select(a =>
-            {
-                string description = "No description available";
-                if (a is IAgentExtended extended)
-                {
-                    description = extended.Capabilities?.Description ?? description;
-                }
-                return (a.Name, description);
-            });
+            .Select(a => (a.Name, a.Description));
     }
 
     /// <summary>

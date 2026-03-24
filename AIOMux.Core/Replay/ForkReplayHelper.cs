@@ -12,7 +12,11 @@ internal static class ForkReplayHelper
         return await engine.ReplayAsync(runId);
     }
 
-    public static bool TryHydrateContext(ExecutionContext context, IReadOnlyList<RuntimeEvent> events, int eventIndex, out string? error)
+    public static bool TryHydrateContext(
+        ExecutionContext context,
+        IReadOnlyList<RuntimeEvent> events,
+        int eventIndex,
+        out string? error)
     {
         error = null;
 
@@ -31,7 +35,7 @@ internal static class ForkReplayHelper
                 var payload = GetPayload<InputReceivedEvent.InputReceivedPayload>(evt);
                 if (payload != null)
                 {
-                    context.UserInput = payload.Input;
+                    context.Inputs["input"] = payload.Input;
                     if (!context.State.ContainsKey("user.input.original"))
                         context.State["user.input.original"] = payload.Input;
                 }

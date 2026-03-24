@@ -17,12 +17,12 @@ public sealed record ExecutionForkRequest
     /// <summary>The plan to execute after hydration.</summary>
     public ExecutionPlan Plan { get; init; } = default!;
 
-    /// <summary>The runtime context to hydrate and run with.</summary>
+    /// <summary>The context to hydrate and run with.</summary>
     public ExecutionContext Context { get; init; } = default!;
 
-    /// <summary>Optional policy engine applied during tool execution.</summary>
+    /// <summary>Optional policy engine applied during tool execution after the fork.</summary>
     public IPolicyEngine? PolicyEngine { get; init; }
 
-    /// <summary>Replay mode used during execution.</summary>
+    /// <summary>Replay mode used during execution after the fork.</summary>
     public ReplayMode ReplayMode { get; init; } = ReplayMode.None;
 }

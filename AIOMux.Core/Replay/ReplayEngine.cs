@@ -122,10 +122,9 @@ public class ReplayEngine
             {
                 "RunStarted" => JsonSerializer.Deserialize<RunStartedEvent>(json),
                 "InputReceived" => JsonSerializer.Deserialize<InputReceivedEvent>(json),
-                "StepCompleted" => JsonSerializer.Deserialize<StepCompletedEvent>(json),
                 "StepStarted" => JsonSerializer.Deserialize<StepStartedEvent>(json),
+                "StepCompleted" => JsonSerializer.Deserialize<StepCompletedEvent>(json),
                 "StepFailed" => JsonSerializer.Deserialize<StepFailedEvent>(json),
-                "ToolInvoked" => JsonSerializer.Deserialize<ToolInvokedEvent>(json),
                 "ToolProposed" => JsonSerializer.Deserialize<Replay.Models.ToolProposedEvent>(json),
                 "PolicyEvaluated" => JsonSerializer.Deserialize<Replay.Models.PolicyEvaluatedEvent>(json),
                 "ToolExecuted" => JsonSerializer.Deserialize<Replay.Models.ToolExecutedEvent>(json),
@@ -242,21 +241,6 @@ public class ReplayEngine
                         StepName = payload.StepName,
                         Output = payload.Output,
                         DurationMs = payload.DurationMs,
-                        Timestamp = evt.TimestampUtc
-                    });
-                }
-            }
-            else if (evt.Type == "ToolInvoked")
-            {
-                var payload = JsonSerializer.Deserialize<ToolInvokedEvent.ToolInvokedPayload>(
-                    JsonSerializer.Serialize(evt.Payload)
-                );
-                if (payload != null)
-                {
-                    toolCalls.Add(new ReplayToolCall
-                    {
-                        ToolName = payload.ToolName,
-                        Args = payload.Args,
                         Timestamp = evt.TimestampUtc
                     });
                 }
