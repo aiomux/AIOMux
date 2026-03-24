@@ -4,8 +4,9 @@ namespace AIOMux.Core.Policy;
 
 public class AllowAllPolicyEngine : IPolicyEngine
 {
-    public PolicyDecision Evaluate(ToolCall call, AgentContext context)
+    public PolicyDecision Evaluate(ToolCall call, ExecutionContext context)
         => PolicyDecision.Allow();
 }
+
 
 

@@ -24,21 +24,6 @@ public interface IAgentManager
     string GetFormattedAgentList();
 
     /// <summary>
-    /// Creates and registers a new agent chain with the specified name.
-    /// </summary>
-    /// <param name="name">Unique name for the chain</param>
-    /// <returns>The newly created agent chain</returns>
-    AgentChain CreateChain(string name);
-
-    /// <summary>
-    /// Creates a new agent chain that executes the specified agents in sequence.
-    /// </summary>
-    /// <param name="name">Name of the chain</param>
-    /// <param name="agentNames">Names of agents to include in the chain</param>
-    /// <returns>The created agent chain, or null if any agent wasn't found</returns>
-    AgentChain? CreateChainFromExisting(string name, IEnumerable<string> agentNames);
-
-    /// <summary>
     /// Get available agents with their descriptions for use in planning.
     /// </summary>
     /// <returns>Collection of agents with name and description</returns>

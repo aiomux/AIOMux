@@ -15,7 +15,7 @@ public class ToolDispatcher : IToolDispatcher
         _policyEngine = policyEngine ?? new AllowAllPolicyEngine();
     }
 
-    public async Task<ToolResult> InvokeAsync(ToolCall call, AgentContext context, CancellationToken ct = default)
+    public async Task<ToolResult> InvokeAsync(ToolCall call, ExecutionContext context, CancellationToken ct = default)
     {
         // Check cancellation at the start
         ct.ThrowIfCancellationRequested();

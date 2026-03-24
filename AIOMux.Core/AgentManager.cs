@@ -60,41 +60,6 @@ public class AgentManager : IAgentManager
     }
 
     /// <summary>
-    /// Creates and registers a new agent chain with the specified name.
-    /// </summary>
-    /// <param name="name">Unique name for the chain</param>
-    /// <returns>The newly created agent chain</returns>
-    public AgentChain CreateChain(string name)
-    {
-        var chain = new AgentChain(name);
-        Register(chain);
-        return chain;
-    }
-
-    /// <summary>
-    /// Creates a new agent chain that executes the specified agents in sequence.
-    /// </summary>
-    /// <param name="name">Name of the chain</param>
-    /// <param name="agentNames">Names of agents to include in the chain</param>
-    /// <returns>The created agent chain, or null if any agent wasn't found</returns>
-    public AgentChain? CreateChainFromExisting(string name, IEnumerable<string> agentNames)
-    {
-        var chain = new AgentChain(name);
-
-        foreach (var agentName in agentNames)
-        {
-            var agent = GetByName(agentName);
-            if (agent == null)
-                return null;
-
-            chain.AddAgent(agent);
-        }
-
-        Register(chain);
-        return chain;
-    }
-
-    /// <summary>
     /// Get available agents with their descriptions for use in planning.
     /// </summary>
     /// <returns>Collection of agents with name and description</returns>

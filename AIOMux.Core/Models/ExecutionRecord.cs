@@ -49,4 +49,9 @@ public sealed class ExecutionRecord
     /// When the record was captured.
     /// </summary>
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Elapsed execution time in milliseconds.
+    /// </summary>
+    public double DurationMs { get; set; }
 }

@@ -12,7 +12,7 @@ internal static class ForkReplayHelper
         return await engine.ReplayAsync(runId);
     }
 
-    public static bool TryHydrateContext(AgentContext context, IReadOnlyList<RuntimeEvent> events, int eventIndex, out string? error)
+    public static bool TryHydrateContext(ExecutionContext context, IReadOnlyList<RuntimeEvent> events, int eventIndex, out string? error)
     {
         error = null;
 
@@ -32,19 +32,15 @@ internal static class ForkReplayHelper
                 if (payload != null)
                 {
                     context.UserInput = payload.Input;
-                    if (!context.Variables.ContainsKey("user.input.original"))
-                    {
-                        context.Variables["user.input.original"] = payload.Input;
-                    }
+                    if (!context.State.ContainsKey("user.input.original"))
+                        context.State["user.input.original"] = payload.Input;
                 }
             }
             else if (evt.Type == "StepStarted")
             {
                 var payload = GetPayload<StepStartedEvent.StepStartedPayload>(evt);
                 if (payload != null)
-                {
-                    context.Variables["stepIndex"] = payload.StepIndex;
-                }
+                    context.State["stepIndex"] = payload.StepIndex;
             }
             else if (evt.Type == "StepCompleted")
             {
@@ -52,10 +48,8 @@ internal static class ForkReplayHelper
                 if (payload != null)
                 {
                     if (!string.IsNullOrWhiteSpace(payload.StepName))
-                    {
-                        context.Variables[payload.StepName] = payload.Output;
-                    }
-                    context.Variables["stepIndex"] = payload.StepIndex;
+                        context.State[payload.StepName] = payload.Output;
+                    context.State["stepIndex"] = payload.StepIndex;
                 }
             }
         }
@@ -67,9 +61,7 @@ internal static class ForkReplayHelper
     {
         var filePath = GetRunFilePath(sourceRunId);
         if (!File.Exists(filePath))
-        {
             return null;
-        }
 
         var replaySource = new InMemoryReplaySource();
         var callIdMap = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -79,9 +71,7 @@ internal static class ForkReplayHelper
         foreach (var line in File.ReadLines(filePath))
         {
             if (string.IsNullOrWhiteSpace(line))
-            {
                 continue;
-            }
 
             using var doc = JsonDocument.Parse(line);
             var eventIndex = doc.RootElement.TryGetProperty("Seq", out var seqElement) && seqElement.ValueKind == JsonValueKind.Number
@@ -91,52 +81,38 @@ internal static class ForkReplayHelper
             fallbackIndex++;
 
             if (eventIndex > upToEventIndex)
-            {
                 continue;
-            }
 
             if (!doc.RootElement.TryGetProperty("Type", out var typeElement))
-            {
                 continue;
-            }
 
             var eventType = typeElement.GetString();
             if (string.Equals(eventType, "StepStarted", StringComparison.Ordinal))
             {
                 if (TryGetPayloadProperty(doc.RootElement, "StepIndex", out var stepIndexElement))
-                {
                     currentStepIndex = stepIndexElement.GetInt32();
-                }
             }
             else if (string.Equals(eventType, "StepCompleted", StringComparison.Ordinal))
             {
                 if (TryGetPayloadProperty(doc.RootElement, "StepIndex", out var stepIndexElement))
-                {
                     currentStepIndex = stepIndexElement.GetInt32();
-                }
             }
             else if (string.Equals(eventType, "ToolProposed", StringComparison.Ordinal))
             {
                 if (!doc.RootElement.TryGetProperty("Payload", out var payloadElement))
-                {
                     continue;
-                }
 
                 if (!payloadElement.TryGetProperty("CallId", out var callIdElement) ||
                     !payloadElement.TryGetProperty("ToolName", out var toolNameElement) ||
                     !payloadElement.TryGetProperty("JsonArgs", out var jsonArgsElement))
-                {
                     continue;
-                }
 
                 var oldCallId = callIdElement.GetString();
                 var toolName = toolNameElement.GetString();
                 var jsonArgs = jsonArgsElement.GetString();
 
                 if (string.IsNullOrWhiteSpace(oldCallId) || string.IsNullOrWhiteSpace(toolName) || jsonArgs == null)
-                {
                     continue;
-                }
 
                 var stepIndexText = currentStepIndex?.ToString() ?? string.Empty;
                 var newCallId = DeterministicCallId.Generate(newRunId, stepIndexText, toolName, jsonArgs);
@@ -145,20 +121,18 @@ internal static class ForkReplayHelper
             else if (string.Equals(eventType, "ToolResult", StringComparison.Ordinal))
             {
                 if (!doc.RootElement.TryGetProperty("Result", out var resultElement))
-                {
                     continue;
-                }
+
+                if (!resultElement.TryGetProperty("CallId", out var callIdElement))
+                    continue;
+
+                var oldCallId = callIdElement.GetString();
+                if (string.IsNullOrWhiteSpace(oldCallId) || !callIdMap.TryGetValue(oldCallId, out var newCallId))
+                    continue;
 
                 var result = resultElement.Deserialize<ToolResult>();
-                if (result == null || string.IsNullOrWhiteSpace(result.CallId))
-                {
+                if (result == null)
                     continue;
-                }
-
-                if (!callIdMap.TryGetValue(result.CallId, out var newCallId))
-                {
-                    continue;
-                }
 
                 replaySource.AddToolResult(newCallId, new ToolResult
                 {
@@ -176,10 +150,7 @@ internal static class ForkReplayHelper
     private static T? GetPayload<T>(RuntimeEvent evt)
     {
         if (evt.Payload is JsonElement element)
-        {
             return element.Deserialize<T>();
-        }
-
         return evt.Payload is T typed ? typed : default;
     }
 
@@ -194,8 +165,7 @@ internal static class ForkReplayHelper
     {
         var runsDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".aiomux",
-            "runs");
+            ".aiomux", "runs");
         return Path.Combine(runsDirectory, $"{runId}.jsonl");
     }
 }

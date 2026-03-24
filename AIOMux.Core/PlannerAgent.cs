@@ -18,32 +18,26 @@ public sealed class PlannerAgent : IAgent
         _llmClient = llmClient;
     }
 
-    public async Task<string> ExecuteAsync(AgentContext context)
+    public async Task<string> ExecuteAsync(ExecutionContext context)
     {
         var availableAgents = GetAvailableAgents(context);
         if (availableAgents.Count == 0)
-        {
             return "[]";
-        }
 
         if (_llmClient == null)
-        {
             return BuildFallbackPlanJson(availableAgents[0]);
-        }
 
         var systemPrompt = BuildSystemPrompt(availableAgents);
         var raw = await _llmClient.CompleteAsync(context.UserInput, systemPrompt);
         var json = TryExtractJsonArray(raw);
 
         if (TryValidatePlan(json, availableAgents, out var validated))
-        {
             return validated;
-        }
 
         return BuildFallbackPlanJson(availableAgents[0]);
     }
 
-    private static List<string> GetAvailableAgents(AgentContext context)
+    private static List<string> GetAvailableAgents(ExecutionContext context)
     {
         if (context.AgentManager != null)
         {
@@ -55,7 +49,7 @@ public sealed class PlannerAgent : IAgent
                 .ToList();
         }
 
-        if (context.Variables.TryGetValue("AvailableAgents", out var value) && value is string lines)
+        if (context.State.TryGetValue("AvailableAgents", out var value) && value is string lines)
         {
             return lines.Split('\n', StringSplitOptions.RemoveEmptyEntries)
                 .Select(l => l.Trim().TrimStart('-').Trim())
@@ -88,16 +82,12 @@ Constraints:
     private static string TryExtractJsonArray(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
-        {
             return raw;
-        }
 
         var start = raw.IndexOf('[');
         var end = raw.LastIndexOf(']');
         if (start >= 0 && end > start)
-        {
             return raw[start..(end + 1)];
-        }
 
         return raw.Trim();
     }
@@ -105,33 +95,24 @@ Constraints:
     private static bool TryValidatePlan(string candidateJson, IReadOnlyCollection<string> availableAgents, out string validatedJson)
     {
         validatedJson = string.Empty;
-
         if (string.IsNullOrWhiteSpace(candidateJson))
-        {
             return false;
-        }
 
         try
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var steps = JsonSerializer.Deserialize<List<AgentStep>>(candidateJson, options);
+            var steps = JsonSerializer.Deserialize<List<PlanStep>>(candidateJson, options);
             if (steps == null || steps.Count == 0)
-            {
                 return false;
-            }
 
             var allowed = new HashSet<string>(availableAgents, StringComparer.OrdinalIgnoreCase);
             foreach (var step in steps)
             {
                 if (string.IsNullOrWhiteSpace(step.AgentName) || !allowed.Contains(step.AgentName))
-                {
                     return false;
-                }
 
                 if (string.IsNullOrWhiteSpace(step.InputFrom))
-                {
                     step.InputFrom = "user";
-                }
             }
 
             validatedJson = JsonSerializer.Serialize(steps);
@@ -145,16 +126,18 @@ Constraints:
 
     private static string BuildFallbackPlanJson(string agentName)
     {
-        var steps = new List<AgentStep>
+        var steps = new List<PlanStep>
         {
-            new()
-            {
-                AgentName = agentName,
-                InputFrom = "user",
-                OutputTo = agentName
-            }
+            new() { AgentName = agentName, InputFrom = "user", OutputTo = agentName }
         };
-
         return JsonSerializer.Serialize(steps);
+    }
+
+    // Local DTO used only for JSON round-tripping inside PlannerAgent.
+    private sealed class PlanStep
+    {
+        public string AgentName { get; set; } = string.Empty;
+        public string? InputFrom { get; set; }
+        public string? OutputTo { get; set; }
     }
 }
