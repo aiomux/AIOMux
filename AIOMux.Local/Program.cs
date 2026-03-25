@@ -1,100 +1,160 @@
-using AIOMux.Local.Commands;
-
 namespace AIOMux.Local;
 
-internal class Program
+internal static class Program
 {
-    static async Task Main(string[] args)
+    private const string SolutionFileName = "solution.json";
+
+    private static async Task<int> Main(string[] args)
     {
+        if (args.Length == 0)
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        var command = args[0].Trim().ToLowerInvariant();
+        var commandArgs = args.Skip(1).ToArray();
+
+        return command switch
+        {
+            "run" => await RunAsync(commandArgs),
+            "validate" => Validate(commandArgs),
+            "replay" => Replay(commandArgs),
+            "fork" => Fork(commandArgs),
+            "help" or "--help" or "-h" => PrintHelpAndExit(),
+            _ => UnknownCommand(command)
+        };
+    }
+
+    private static async Task<int> RunAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("Missing solution path.");
+            PrintUsage();
+            return 1;
+        }
+
+        var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
+        var input = args.Length > 1 ? string.Join(' ', args.Skip(1)) : string.Empty;
+
+        Console.WriteLine("Path: SolutionLoader -> SolutionRunner -> ExecutionRuntime");
+
+        var runner = new SolutionRunner();
+
+        var summary = await runner.RunAsync(solutionJsonPath, input);
+        PrintRunSummary(summary);
+
+        return summary.Success ? 0 : 1;
+    }
+
+    private static int Validate(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("Missing solution path.");
+            PrintUsage();
+            return 1;
+        }
+
         try
         {
-            if (args.Length == 0)
-            {
-                PrintUsage();
-                Environment.Exit(0);
-            }
+            var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
+            var loader = new SolutionLoader(solutionJsonPath);
+            var solution = loader.Load();
+            loader.ValidateReferences(solution);
 
-            var command = args[0].ToLower();
-
-            switch (command)
-            {
-                case "init":
-                    InitCommand.Execute();
-                    break;
-
-                case "run":
-                    var solutionPath = args.Length > 1 ? args[1] : null;
-                    await RunCommand.ExecuteAsync(solutionPath);
-                    break;
-
-                case "notes":
-                    await NotesCommand.ExecuteAsync(args);
-                    break;
-
-                case "runs":
-                    await RunManagementCommand.ExecuteAsync(args);
-                    break;
-
-                case "demo":
-                    if (args.Length > 1 && args[1].ToLower() == "notes")
-                    {
-                        await DemoNotesCommand.ExecuteAsync(args);
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Unknown demo command. Try: aiomux demo notes");
-                        PrintUsage();
-                        Environment.Exit(1);
-                    }
-                    break;
-
-                case "gauntlet":
-                    await GauntletRagPoisonExfilCommand.ExecuteAsync(args);
-                    break;
-
-                case "-h":
-                case "--help":
-                case "help":
-                    PrintUsage();
-                    break;
-
-                default:
-                    Console.Error.WriteLine($"Unknown command: {command}");
-                    PrintUsage();
-                    Environment.Exit(1);
-                    break;
-            }
+            Console.WriteLine($"Valid solution: {solution.Name}");
+            Console.WriteLine($"  Entry: {solution.Entry}");
+            Console.WriteLine($"  WorkingDirectory: {solution.WorkingDirectory}");
+            return 0;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Fatal error: {ex.Message}");
-            Environment.Exit(1);
+            Console.Error.WriteLine($"Validation failed: {ex.Message}");
+            return 1;
         }
+    }
+
+    private static int Replay(string[] args)
+    {
+        _ = args;
+        Console.Error.WriteLine("'replay' is reserved for a future command. Use 'run' for now.");
+        return 2;
+    }
+
+    private static int Fork(string[] args)
+    {
+        _ = args;
+        Console.Error.WriteLine("'fork' is reserved for a future command. Use 'run' for now.");
+        return 2;
+    }
+
+    private static string ResolveSolutionJsonPath(string pathOrFolder)
+    {
+        var fullPath = Path.GetFullPath(pathOrFolder);
+
+        if (Directory.Exists(fullPath))
+        {
+            var solutionPath = Path.Combine(fullPath, SolutionFileName);
+            if (!File.Exists(solutionPath))
+                throw new FileNotFoundException($"Could not find '{SolutionFileName}' in '{fullPath}'.");
+
+            return solutionPath;
+        }
+
+        if (File.Exists(fullPath))
+            return fullPath;
+
+        throw new FileNotFoundException($"Could not find solution path '{pathOrFolder}'.");
+    }
+
+    private static void PrintRunSummary(SolutionExecutionSummary summary)
+    {
+        var status = summary.Success ? "Success" : "Failed";
+        Console.WriteLine($"{status}: {summary.SolutionName} [{summary.ExecutedSteps}/{summary.StepCount}] {summary.DurationMs:F0}ms");
+
+        if (!string.IsNullOrWhiteSpace(summary.Error))
+            Console.WriteLine($"Error: {summary.Error}");
+
+        if (summary.Success && !string.IsNullOrWhiteSpace(summary.Output))
+            Console.WriteLine($"Output: {TruncateSingleLine(summary.Output, 180)}");
+    }
+
+    private static string TruncateSingleLine(string value, int maxLength)
+    {
+        var singleLine = value.Replace("\r", " ").Replace("\n", " ").Trim();
+        if (singleLine.Length <= maxLength)
+            return singleLine;
+
+        return singleLine[..maxLength] + "...";
+    }
+
+    private static int PrintHelpAndExit()
+    {
+        PrintUsage();
+        return 0;
+    }
+
+    private static int UnknownCommand(string command)
+    {
+        Console.Error.WriteLine($"Unknown command: {command}");
+        PrintUsage();
+        return 1;
     }
 
     private static void PrintUsage()
     {
-        Console.WriteLine("AIOMux Local - Local workspace initialization and orchestration");
+        Console.WriteLine("AIOMux.Local CLI");
         Console.WriteLine();
-        Console.WriteLine("Usage:");
-        Console.WriteLine("  aiomux init                    - Initialize a new workspace");
-        Console.WriteLine("  aiomux run [solutionPath]      - Start the interactive REPL");
-        Console.WriteLine("  aiomux notes <subcommand>      - Manage notes (add, search, list)");
-        Console.WriteLine("  aiomux runs <subcommand>       - Manage runs (list, show, replay)");
-        Console.WriteLine("  aiomux demo notes <subcommand> - Demo NotesSkill with replay");
-        Console.WriteLine("  aiomux gauntlet rag-poison-exfil         - Run RAG poison exfiltration gauntlet demo");
-        Console.WriteLine("  aiomux gauntlet fork-happy-path <runId>  - Fork a gauntlet run down the happy (unblocked) path");
-        Console.WriteLine("  aiomux help                    - Show this help message");
+        Console.WriteLine("run <solution-path> [input]");
+        Console.WriteLine("  Executes solution.json via SolutionLoader -> SolutionRunner -> ExecutionRuntime");
         Console.WriteLine();
-        Console.WriteLine("Examples:");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- init");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- run");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- run /path/to/workspace");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- notes add --text \"My note\"");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- notes search --q \"keyword\"");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- runs list");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- runs replay <runId>");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- demo notes add --text \"Demo note\" --replay");
-        Console.WriteLine("  dotnet run --project AIOMux.Local -- gauntlet rag-poison-exfil");
+        Console.WriteLine("validate <solution-path>");
+        Console.WriteLine("  Validates solution.json and referenced files");
+        Console.WriteLine();
+        Console.WriteLine("replay <...>");
+        Console.WriteLine("fork <...>");
+        Console.WriteLine("  Reserved seams for future replay/fork workflows");
     }
 }

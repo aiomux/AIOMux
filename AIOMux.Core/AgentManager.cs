@@ -15,7 +15,10 @@ public class AgentManager : IAgentManager
     private readonly ILogger<AgentManager>? _logger;
     public ILoggerFactory? LoggerFactory { get; }
 
-    // Accept optional ILoggerFactory
+    /// <summary>
+    /// Initializes a new instance of <see cref="AgentManager"/>.
+    /// </summary>
+    /// <param name="loggerFactory">Optional logger factory used to create component loggers.</param>
     public AgentManager(ILoggerFactory? loggerFactory = null)
     {
         LoggerFactory = loggerFactory;
@@ -50,7 +53,7 @@ public class AgentManager : IAgentManager
         var sb = new StringBuilder();
         foreach (var agent in _agents)
         {
-            // Skip the planner agent — it drives plan generation, not plan steps
+            // Skip the planner agent because it drives plan generation, not plan steps.
             if (agent.Name.Contains("Planner", StringComparison.OrdinalIgnoreCase))
                 continue;
 

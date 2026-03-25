@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace AIOMux.Core;
@@ -31,8 +30,9 @@ public class ExecutionRuntime : IExecutionRuntime
         _eventSink = eventSink;
     }
 
-    // ── RunAsync ──────────────────────────────────────────────────────────────
-
+    /// <summary>
+    /// Executes an execution run request.
+    /// </summary>
     public async Task<ExecutionResult> RunAsync(ExecutionRunRequest request, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
@@ -48,7 +48,7 @@ public class ExecutionRuntime : IExecutionRuntime
             var plan = request.Plan;
             var ctx = request.Context;
 
-            // Seed State["input"] and preserve the original entry input
+            // Seed state input keys on first execution.
             if (!ctx.State.ContainsKey("input"))
                 ctx.State["input"] = ctx.Inputs.TryGetValue("input", out var entry) ? entry?.ToString() ?? string.Empty : string.Empty;
             if (!ctx.State.ContainsKey("user.input.original"))
@@ -101,7 +101,7 @@ public class ExecutionRuntime : IExecutionRuntime
                         return new ExecutionResult { Success = false, Error = msg, StepIndex = i, StepId = step.Id };
                     }
 
-                    // Step succeeded
+                    // Handle successful step execution.
                     output = stepResult.Output;
                     var outputKey = step.OutputKey ?? step.Target;
                     ctx.State[outputKey] = output;
@@ -172,7 +172,7 @@ public class ExecutionRuntime : IExecutionRuntime
                 }
             }
 
-            // Optionally append a summary report
+            // Append summary output when enabled.
             if (ctx.Options.GenerateJobSummary && ctx.Options.CollectMetrics)
                 output = AppendSummary(output, ctx, plan.Name);
 
@@ -194,8 +194,9 @@ public class ExecutionRuntime : IExecutionRuntime
         }
     }
 
-    // ── ForkAsync ─────────────────────────────────────────────────────────────
-
+    /// <summary>
+    /// Executes a forked run request using replay hydration.
+    /// </summary>
     public async Task<ExecutionResult> ForkAsync(ExecutionForkRequest request, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
@@ -248,17 +249,18 @@ public class ExecutionRuntime : IExecutionRuntime
         }
     }
 
-    // ── Step execution ────────────────────────────────────────────────────────
-
+    /// <summary>
+    /// Resolves, authorizes, and executes a single step.
+    /// </summary>
     private async Task<StepExecutionResult> ExecuteStepAsync(
         ExecutionStep step,
         ExecutionContext ctx,
         CancellationToken ct)
     {
-        // 1. Resolve all step inputs from static values and bindings
+        // Resolve step inputs from static values and bindings.
         var resolvedInputs = StepInputResolver.ResolveInputs(step, ctx);
 
-        // 2. Evaluate policy for this step (applies to both tools and agents)
+        // Evaluate policy for the step.
         var stepMetadata = new ExecutionStepMetadata
         {
             StepId = step.Id,
@@ -280,7 +282,7 @@ public class ExecutionRuntime : IExecutionRuntime
             };
         }
 
-        // 3. Dispatch to appropriate executor
+        // Dispatch to the matching step executor.
         if (step.Type == "tool")
         {
             return await ExecuteToolStepAsync(step, resolvedInputs, ctx, ct);
@@ -300,12 +302,8 @@ public class ExecutionRuntime : IExecutionRuntime
         throw new InvalidOperationException($"Unknown step type: '{step.Type}'");
     }
 
-    // ── Tool execution ────────────────────────────────────────────────────────
-
     /// <summary>
-    /// Orchestrates tool execution: executes tool, handles replay, and returns result.
-    /// Policy is evaluated at the step level in ExecuteStepAsync before dispatch.
-    /// Execution trace is recorded in ExecutionRecord, not event-based.
+    /// Orchestrates tool execution and returns the step output.
     /// </summary>
     private async Task<StepExecutionResult> ExecuteToolStepAsync(
         ExecutionStep step,
@@ -313,16 +311,16 @@ public class ExecutionRuntime : IExecutionRuntime
         ExecutionContext ctx,
         CancellationToken ct)
     {
-        // 1. Get primary input value for tool execution
+        // Resolve the primary tool input.
         var input = StepInputResolver.GetInputString(resolvedInputs, "input");
 
-        // 2. Generate deterministic call ID
+        // Generate a deterministic call identifier.
         var stepIndex = ctx.State.TryGetValue("stepIndex", out var stepIndexValue)
             ? stepIndexValue?.ToString() ?? string.Empty
             : string.Empty;
         var callId = DeterministicCallId.Generate(ctx.RunId, stepIndex, step.Target, input);
 
-        // 3. Check if tool exists
+        // Resolve the target tool.
         if (!ctx.Tools.TryGetValue(step.Target, out var tool))
         {
             var msg = $"Tool not found: {step.Target}";
@@ -335,19 +333,18 @@ public class ExecutionRuntime : IExecutionRuntime
 
         var call = new ToolCall { CallId = callId, ToolName = step.Target, JsonArgs = input };
 
-        // 4. Check replay source
+        // Load replay output when available.
         ToolResult toolResult;
 
         if ((ctx.ReplayMode == ReplayMode.Full || ctx.ReplayMode == ReplayMode.ToolsOnly)
             && ctx.ReplaySource != null
             && ctx.ReplaySource.TryGetToolResult(call.CallId, out var replayedResult))
         {
-            // Use recorded result from replay
             toolResult = replayedResult;
         }
         else
         {
-            // 5. Execute tool
+            // Execute the tool when replay data is not available.
             ct.ThrowIfCancellationRequested();
 
             try
@@ -372,15 +369,16 @@ public class ExecutionRuntime : IExecutionRuntime
             }
         }
 
-        // 6. Return step result
+        // Return the normalized step result.
         if (!toolResult.Success)
             throw new InvalidOperationException(toolResult.Error ?? $"Tool '{step.Target}' failed");
 
         return new StepExecutionResult { Success = true, Output = toolResult.JsonResult };
     }
 
-    // ── Summary ───────────────────────────────────────────────────────────────
-
+    /// <summary>
+    /// Appends execution metrics to output text.
+    /// </summary>
     private static string AppendSummary(string output, ExecutionContext ctx, string planName)
     {
         var sb = new StringBuilder();
@@ -398,8 +396,9 @@ public class ExecutionRuntime : IExecutionRuntime
         return $"{output}\n\n{sb}";
     }
 
-    // ── Utilities ─────────────────────────────────────────────────────────────
-
+    /// <summary>
+    /// Creates a failed execution result.
+    /// </summary>
     private static ExecutionResult Fail(string? error)
         => new() { Success = false, Error = error };
 }

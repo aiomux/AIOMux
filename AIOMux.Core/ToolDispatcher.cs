@@ -4,26 +4,35 @@ using AIOMux.Core.Replay;
 
 namespace AIOMux.Core;
 
+/// <summary>
+/// Dispatches tool calls with optional policy checks, replay support, and event recording.
+/// </summary>
 public class ToolDispatcher : IToolDispatcher
 {
     private readonly IRuntimeEventSink _eventSink;
     private readonly IPolicyEngine _policyEngine;
 
+    /// <summary>
+    /// Creates a new dispatcher for tool invocation.
+    /// </summary>
     public ToolDispatcher(IRuntimeEventSink eventSink, IPolicyEngine? policyEngine = null)
     {
         _eventSink = eventSink;
         _policyEngine = policyEngine ?? new AllowAllPolicyEngine();
     }
 
+    /// <summary>
+    /// Invokes a tool call and records replay events.
+    /// </summary>
     public async Task<ToolResult> InvokeAsync(
         ToolCall call,
         ExecutionContext context,
         CancellationToken ct = default)
     {
-        // Check cancellation at the start
+        // Validate cancellation before starting dispatch.
         ct.ThrowIfCancellationRequested();
 
-        // 1. ToolProposed event
+        // Record the proposed tool call.
         await _eventSink.RecordAsync(
             new Replay.Models.ToolProposedEvent
             {
@@ -35,9 +44,8 @@ public class ToolDispatcher : IToolDispatcher
                 }
             }, ct);
 
-        // 2. Policy evaluation
-        // Note: Policy is now evaluated at the step level in ExecutionRuntime.
-        // This is a fallback for any direct ToolDispatcher usage (not in active path).
+        // Evaluate policy for direct ToolDispatcher usage.
+        // Policy is primarily evaluated at the step level in ExecutionRuntime.
         var stepMetadata = new ExecutionStepMetadata
         {
             StepId = call.CallId,
@@ -71,7 +79,7 @@ public class ToolDispatcher : IToolDispatcher
             return deniedResult;
         }
 
-        // 3. Check replay mode
+        // Resolve result from replay when available.
         ToolResult result;
         bool fromReplay = false;
 
@@ -79,16 +87,14 @@ public class ToolDispatcher : IToolDispatcher
             && context.ReplaySource != null
             && context.ReplaySource.TryGetToolResult(call.CallId, out var replayedResult))
         {
-            // Use recorded result from replay
             result = replayedResult;
             fromReplay = true;
         }
         else
         {
-            // Check cancellation before executing tool
+            // Validate cancellation before tool execution.
             ct.ThrowIfCancellationRequested();
 
-            // Execute tool normally
             if (!context.Tools.TryGetValue(call.ToolName, out var tool))
             {
                 result = new ToolResult
@@ -124,7 +130,7 @@ public class ToolDispatcher : IToolDispatcher
             }
         }
 
-        // 4. ToolExecuted event
+        // Record execution and final result events.
         await _eventSink.RecordAsync(
             new Replay.Models.ToolExecutedEvent
             {
@@ -136,7 +142,6 @@ public class ToolDispatcher : IToolDispatcher
                 }
             }, ct);
 
-        // 5. ToolResult event
         await _eventSink.RecordAsync(new Replay.Models.ToolResultEvent { Result = result }, ct);
 
         return result;

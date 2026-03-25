@@ -51,9 +51,19 @@ public class RunStartedEvent : RuntimeEvent
         Type = "RunStarted";
     }
 
+    /// <summary>
+    /// Payload for a run-started event.
+    /// </summary>
     public class RunStartedPayload
     {
+        /// <summary>
+        /// Name of the pipeline that started.
+        /// </summary>
         public string PipelineName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Working directory for the run.
+        /// </summary>
         public string? WorkingDirectory { get; set; }
     }
 }
@@ -68,9 +78,19 @@ public class InputReceivedEvent : RuntimeEvent
         Type = "InputReceived";
     }
 
+    /// <summary>
+    /// Payload for an input-received event.
+    /// </summary>
     public class InputReceivedPayload
     {
+        /// <summary>
+        /// Input value received by the runtime.
+        /// </summary>
         public string Input { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Hash of the input value.
+        /// </summary>
         public string InputHash { get; set; } = string.Empty;
     }
 }
@@ -85,10 +105,24 @@ public class StepStartedEvent : RuntimeEvent
         Type = "StepStarted";
     }
 
+    /// <summary>
+    /// Payload for a step-started event.
+    /// </summary>
     public class StepStartedPayload
     {
+        /// <summary>
+        /// Identifier of the run.
+        /// </summary>
         public string RunId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Zero-based step index.
+        /// </summary>
         public int StepIndex { get; set; }
+
+        /// <summary>
+        /// Target executed by the step.
+        /// </summary>
         public string StepTarget { get; set; } = string.Empty;
     }
 }
@@ -103,14 +137,44 @@ public class StepCompletedEvent : RuntimeEvent
         Type = "StepCompleted";
     }
 
+    /// <summary>
+    /// Payload for a step-completed event.
+    /// </summary>
     public class StepCompletedPayload
     {
+        /// <summary>
+        /// Identifier of the run.
+        /// </summary>
         public string RunId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Zero-based step index.
+        /// </summary>
         public int StepIndex { get; set; }
+
+        /// <summary>
+        /// Target executed by the step.
+        /// </summary>
         public string StepTarget { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Name of the step.
+        /// </summary>
         public string StepName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Output produced by the step.
+        /// </summary>
         public string Output { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Hash of the output.
+        /// </summary>
         public string OutputHash { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Step duration in milliseconds.
+        /// </summary>
         public double DurationMs { get; set; }
     }
 }
@@ -125,11 +189,29 @@ public class StepFailedEvent : RuntimeEvent
         Type = "StepFailed";
     }
 
+    /// <summary>
+    /// Payload for a step-failed event.
+    /// </summary>
     public class StepFailedPayload
     {
+        /// <summary>
+        /// Identifier of the run.
+        /// </summary>
         public string RunId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Zero-based step index.
+        /// </summary>
         public int StepIndex { get; set; }
+
+        /// <summary>
+        /// Target executed by the step.
+        /// </summary>
         public string StepTarget { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Error message from the step failure.
+        /// </summary>
         public string ExceptionMessage { get; set; } = string.Empty;
     }
 }
@@ -144,11 +226,29 @@ public class RunFinishedEvent : RuntimeEvent
         Type = "RunFinished";
     }
 
+    /// <summary>
+    /// Payload for a run-finished event.
+    /// </summary>
     public class RunFinishedPayload
     {
+        /// <summary>
+        /// Indicates whether the run completed successfully.
+        /// </summary>
         public bool Success { get; set; }
+
+        /// <summary>
+        /// Final output produced by the run.
+        /// </summary>
         public string? FinalOutput { get; set; }
+
+        /// <summary>
+        /// Error message when the run fails.
+        /// </summary>
         public string? Error { get; set; }
+
+        /// <summary>
+        /// Total run duration in milliseconds.
+        /// </summary>
         public double TotalDurationMs { get; set; }
     }
 }

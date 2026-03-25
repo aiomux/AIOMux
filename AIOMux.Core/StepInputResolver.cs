@@ -19,13 +19,13 @@ internal static class StepInputResolver
     {
         var builder = ImmutableDictionary.CreateBuilder<string, object?>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. Start with static inputs
+        // Apply static step inputs.
         foreach (var (key, value) in step.Inputs)
         {
             builder[key] = value;
         }
 
-        // 2. Overlay with bindings resolved from context
+        // Overlay inputs resolved from bindings.
         foreach (var (key, bindingPath) in step.Bindings)
         {
             var resolvedValue = ResolvePath(bindingPath, ctx);
@@ -58,7 +58,7 @@ internal static class StepInputResolver
         {
             "inputs" => TryGetValue(ctx.Inputs, key),
             "state" => TryGetValue(ctx.State, key),
-            _ => null  // Unknown source, ignore
+            _ => null
         };
     }
 

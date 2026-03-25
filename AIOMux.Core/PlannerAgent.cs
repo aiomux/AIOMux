@@ -135,7 +135,7 @@ Constraints:
         return JsonSerializer.Serialize(steps);
     }
 
-    // Local DTO used only for JSON round-tripping inside PlannerAgent.
+    // Local DTO used for JSON serialization within PlannerAgent.
     private sealed class PlanStep
     {
         public string AgentName { get; set; } = string.Empty;
