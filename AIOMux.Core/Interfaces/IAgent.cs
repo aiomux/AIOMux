@@ -1,4 +1,5 @@
 using AIOMux.Core.Models;
+using System.Collections.Immutable;
 
 namespace AIOMux.Core.Interfaces;
 
@@ -30,9 +31,10 @@ public interface IAgent
     bool SupportsPipelining => true;
 
     /// <summary>
-    /// Executes the agent and returns a step-level result.
+    /// Executes the agent for a step using explicit resolved inputs and returns a step-level result.
     /// </summary>
     Task<StepExecutionResult> ExecuteAsync(
+        ImmutableDictionary<string, object?> inputs,
         ExecutionContext context,
         CancellationToken cancellationToken = default);
 }

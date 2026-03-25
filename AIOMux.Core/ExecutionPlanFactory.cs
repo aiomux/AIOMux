@@ -1,3 +1,4 @@
+using AIOMux.Core.Builders;
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
 
@@ -30,8 +31,8 @@ public static class ExecutionPlanFactory
     /// Creates a plan builder for forking an existing run.
     /// </summary>
     /// <param name="originalPlan">The plan to fork from</param>
-    /// <param name="forkEventIndex">Event index at which to fork (for replay context)</param>
+    /// <param name="forkStepIndex">Step index at which to fork reconstruction</param>
     /// <returns>Builder with fluent methods to add additional steps</returns>
-    public static ReplayForkPlanBuilder Fork(ExecutionPlan originalPlan, int forkEventIndex = 0)
-        => new ReplayForkPlanBuilder(originalPlan, forkEventIndex);
+    public static ReplayForkPlanBuilder Fork(ExecutionPlan originalPlan, int forkStepIndex = 0)
+        => new ReplayForkPlanBuilder(originalPlan, forkStepIndex);
 }

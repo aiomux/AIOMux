@@ -8,34 +8,38 @@ namespace AIOMux.Core.Builders;
 /// Used when continuing or modifying an existing run through a fork point.
 /// 
 /// Fork execution allows:
-/// - Replaying all steps up to a fork point
+/// - Reconstructing state from execution records up to a selected step
 /// - Continuing with new steps after the fork point
 /// - Modifying execution path mid-run
 /// 
 /// Example usage:
 /// <code>
 /// var originalPlan = /* existing plan from source run */;
-/// var forkedPlan = ExecutionPlanFactory.Fork(originalPlan, forkEventIndex: 5)
+/// var forkedPlan = ExecutionPlanFactory.Fork(originalPlan, forkStepIndex: 5)
 ///     .WithDescription("Continuing from step 5 with alternative analysis")
 ///     .AddToolStep("altAnalysis", "AlternativeAnalyzer",
 ///         bindings: new() { ["input"] = "state.previousResult" })
 ///     .BuildAsync();
-/// 
-/// var forkRequest = new ExecutionForkRequest
+///
+/// var context = new ExecutionContext
 /// {
-///     SourceRunId = sourceRunId,
-///     EventIndex = 5,
-///     Plan = forkedPlan.Result,
-///     Context = executionContext,
-///     ReplayMode = ReplayMode.Full
+///     Services = new ExecutionRuntimeServices
+///     {
+///         AgentManager = agentManager,
+///         Tools = tools,
+///         ReplayMode = ReplayMode.Full
+///     }
 /// };
-/// var result = await runtime.ForkAsync(forkRequest);
+///
+/// var runtime = new ExecutionRuntime();
+/// var forkExecutor = new ForkReplayExecutor(runtime);
+/// var result = await forkExecutor.ExecuteForkAsync(sourceRunId, 5, forkedPlan.Result, context);
 /// </code>
 /// </summary>
 public class ReplayForkPlanBuilder : IExecutionPlanBuilder
 {
     private readonly ExecutionPlan _originalPlan;
-    private readonly int _forkEventIndex;
+    private readonly int _forkStepIndex;
     private readonly List<ExecutionStep> _additionalSteps = new();
     private string? _description;
 
@@ -43,11 +47,11 @@ public class ReplayForkPlanBuilder : IExecutionPlanBuilder
     /// Creates a new builder for a replay fork plan.
     /// </summary>
     /// <param name="originalPlan">The plan to fork from</param>
-    /// <param name="forkEventIndex">Event index at which to fork (for replay context)</param>
-    public ReplayForkPlanBuilder(ExecutionPlan originalPlan, int forkEventIndex = 0)
+    /// <param name="forkStepIndex">Step index at which to fork reconstruction</param>
+    public ReplayForkPlanBuilder(ExecutionPlan originalPlan, int forkStepIndex = 0)
     {
         _originalPlan = originalPlan ?? throw new ArgumentNullException(nameof(originalPlan));
-        _forkEventIndex = forkEventIndex;
+        _forkStepIndex = forkStepIndex;
     }
 
     /// <summary>
@@ -119,12 +123,12 @@ public class ReplayForkPlanBuilder : IExecutionPlanBuilder
         var plan = new ExecutionPlan
         {
             Name = planName,
-            Description = _description ?? $"Fork of '{_originalPlan.Name}' at event index {_forkEventIndex}",
+            Description = _description ?? $"Fork of '{_originalPlan.Name}' at step index {_forkStepIndex}",
             Source = PlanSource.ReplayFork,
             Steps = allSteps.AsReadOnly(),
             Metadata = new Dictionary<string, object?>(_originalPlan.Metadata)
             {
-                ["forkEventIndex"] = _forkEventIndex,
+                ["forkStepIndex"] = _forkStepIndex,
                 ["sourceRunPlanName"] = _originalPlan.Name
             }
         };

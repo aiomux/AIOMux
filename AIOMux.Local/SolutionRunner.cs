@@ -1,4 +1,5 @@
 using AIOMux.Core;
+using AIOMux.Core.Builders;
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
 using AIOMux.Core.Policy;
@@ -62,7 +63,7 @@ public class SolutionRunner
 
         try
         {
-            // Load the solution definition.
+            // Solution folder -> SolutionLoader
             _logger?.LogInformation("Loading solution from {Path}", solutionJsonPath);
             var loader = new SolutionLoader(solutionJsonPath);
             var solution = loader.Load();
@@ -71,35 +72,40 @@ public class SolutionRunner
             summary.SolutionName = solution.Name;
             summary.SolutionDescription = solution.Description;
 
-            // Load and build the execution plan.
+            // Solution entry -> ExecutionPlan
             _logger?.LogInformation("Loading execution plan from {Entry}", solution.Entry);
             var planJson = File.ReadAllText(solution.Entry);
-            var plan = await ExecutionPlanFactory
-                .FromJson(planJson, planName: solution.Name)
-                .BuildAsync(cancellationToken);
+            var planBuilder = new JsonExecutionPlanBuilder(planJson, planName: solution.Name);
+            var plan = await planBuilder.BuildAsync(cancellationToken);
 
             summary.PlanName = plan.Name;
             summary.PlanSource = plan.Source;
             summary.StepCount = plan.Steps.Count;
 
-            // Create the execution context.
+            var executionOptions = new AIOMux.Core.Models.ExecutionOptions
+            {
+                CollectMetrics = solution.ExecutionOptions?.CollectMetrics ?? true,
+                GenerateJobSummary = solution.ExecutionOptions?.GenerateJobSummary ?? true,
+                IncludeDetailedMetrics = solution.ExecutionOptions?.IncludeDetailedMetrics ?? false
+            };
+
+            // ExecutionContext + runtime services -> ExecutionRuntime
             _logger?.LogInformation("Creating execution context");
             var ctx = new ExecutionContext
             {
                 RunId = Guid.NewGuid().ToString(),
-                WorkingDirectory = solution.WorkingDirectory ?? Path.GetDirectoryName(solution.Entry),
-                Tools = _tools,
-                AgentManager = _agentManager,
-                Options = new AIOMux.Core.Models.ExecutionOptions
-                {
-                    CollectMetrics = solution.ExecutionOptions?.CollectMetrics ?? true,
-                    GenerateJobSummary = solution.ExecutionOptions?.GenerateJobSummary ?? true,
-                    IncludeDetailedMetrics = solution.ExecutionOptions?.IncludeDetailedMetrics ?? false
-                },
-                PolicyEngine = LoadPolicyEngine(solution.PolicyConfig)
+                WorkingDirectory = solution.WorkingDirectory ?? Path.GetDirectoryName(solution.Entry)
             };
 
-            // Add input values to the context.
+            var services = new ExecutionRuntimeServices
+            {
+                Tools = _tools ?? new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase),
+                AgentManager = _agentManager,
+                Options = executionOptions,
+                PolicyEngine = LoadPolicyEngine(solution.PolicyConfig)
+            };
+            ctx.Services = services;
+
             ctx.Inputs["input"] = input;
             if (additionalInputs != null)
             {
@@ -107,18 +113,15 @@ public class SolutionRunner
                     ctx.Inputs[key] = value;
             }
 
-            // Execute the plan through the runtime.
             _logger?.LogInformation("Starting execution of plan '{PlanName}' with {StepCount} steps",
                 plan.Name, plan.Steps.Count);
 
             var runtimeLogger = _loggerFactory?.CreateLogger<ExecutionRuntime>();
             var runtime = new ExecutionRuntime(logger: runtimeLogger);
-            var request = new AIOMux.Core.Models.ExecutionRunRequest { Plan = plan, Context = ctx };
-            var result = await runtime.RunAsync(request, cancellationToken);
+            var result = await runtime.ExecuteAsync(plan, ctx, cancellationToken);
 
             sw.Stop();
 
-            // Build the execution summary.
             summary.RunId = ctx.RunId;
             summary.Success = result.Success;
             summary.Output = result.Output;

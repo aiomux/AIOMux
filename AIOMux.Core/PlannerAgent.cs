@@ -1,5 +1,6 @@
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
+using System.Collections.Immutable;
 using System.Text.Json;
 
 namespace AIOMux.Core;
@@ -19,6 +20,7 @@ public sealed class PlannerAgent : IAgent
     }
 
     public async Task<StepExecutionResult> ExecuteAsync(
+        ImmutableDictionary<string, object?> inputs,
         ExecutionContext context,
         CancellationToken cancellationToken = default)
     {
@@ -30,7 +32,8 @@ public sealed class PlannerAgent : IAgent
             return new StepExecutionResult { Success = true, Output = BuildFallbackPlanJson(availableAgents[0]) };
 
         var systemPrompt = BuildSystemPrompt(availableAgents);
-        var raw = await _llmClient.CompleteAsync(context.GetInput(), systemPrompt);
+        var userInput = StepInputResolver.GetInputString(inputs, "input", context.GetInput());
+        var raw = await _llmClient.CompleteAsync(userInput, systemPrompt);
         var json = TryExtractJsonArray(raw);
 
         if (TryValidatePlan(json, availableAgents, out var validated))
@@ -41,16 +44,6 @@ public sealed class PlannerAgent : IAgent
 
     private static List<string> GetAvailableAgents(ExecutionContext context)
     {
-        if (context.AgentManager != null)
-        {
-            return context.AgentManager
-                .GetAllAgents()
-                .Select(a => a.Name)
-                .Where(n => !n.Equals("PlannerAgent", StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-
         if (context.State.TryGetValue("AvailableAgents", out var value) && value is string lines)
         {
             return lines.Split('\n', StringSplitOptions.RemoveEmptyEntries)

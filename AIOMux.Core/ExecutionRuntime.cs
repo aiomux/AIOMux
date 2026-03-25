@@ -12,47 +12,47 @@ namespace AIOMux.Core;
 
 /// <summary>
 /// Canonical orchestration engine. Executes an <see cref="ExecutionPlan"/> step by step,
-/// routing each step to its agent or tool, managing state, emitting events, and recording traces.
-/// 
-/// Plans are created via IExecutionPlanBuilder implementations (JsonExecutionPlanBuilder,
-/// PlannerExecutionPlanBuilder, ReplayForkPlanBuilder) and passed to RunAsync or ForkAsync.
-/// The runtime is agnostic to plan origin; it only cares about executing the plan's steps
-/// and recording results in ExecutionRecord.
+/// routes each step to its agent or tool, mutates state, and records all trace data as <see cref="ExecutionRecord"/>.
 /// </summary>
 public class ExecutionRuntime : IExecutionRuntime
 {
     private readonly ILogger<ExecutionRuntime> _logger;
-    private readonly IRuntimeEventSink? _eventSink;
 
-    public ExecutionRuntime(ILogger<ExecutionRuntime>? logger = null, IRuntimeEventSink? eventSink = null)
+    public ExecutionRuntime(ILogger<ExecutionRuntime>? logger = null)
     {
         _logger = logger ?? NullLogger<ExecutionRuntime>.Instance;
-        _eventSink = eventSink;
     }
 
     /// <summary>
-    /// Executes an execution run request.
+    /// Executes an execution plan with the provided context.
+    /// Runtime services are read from <see cref="ExecutionContext.Services"/>.
     /// </summary>
-    public async Task<ExecutionResult> RunAsync(ExecutionRunRequest request, CancellationToken cancellationToken = default)
+    public async Task<ExecutionResult> ExecuteAsync(
+        ExecutionPlan plan,
+        ExecutionContext context,
+        CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
+        ExecutionContext? activeContext = null;
+
         try
         {
-            if (request == null)
-                return Fail("Request cannot be null");
-            if (request.Plan == null)
+            if (plan == null)
                 return Fail("Plan cannot be null");
-            if (request.Context == null)
+            if (context == null)
                 return Fail("Context cannot be null");
 
-            var plan = request.Plan;
-            var ctx = request.Context;
+            var ctx = context;
+            activeContext = ctx;
+            var services = ctx.Services ?? new ExecutionRuntimeServices();
+            ctx.Services = services;
 
-            // Seed state input keys on first execution.
             if (!ctx.State.ContainsKey("input"))
                 ctx.State["input"] = ctx.Inputs.TryGetValue("input", out var entry) ? entry?.ToString() ?? string.Empty : string.Empty;
             if (!ctx.State.ContainsKey("user.input.original"))
                 ctx.State["user.input.original"] = ctx.State["input"];
+
+            PublishAvailableAgents(services, ctx);
 
             _logger.LogInformation("Starting plan '{PlanName}' ({StepCount} steps)", plan.Name, plan.Steps.Count);
 
@@ -70,15 +70,13 @@ public class ExecutionRuntime : IExecutionRuntime
 
                 try
                 {
-                    var stepResult = await ExecuteStepAsync(step, ctx, cancellationToken);
+                    var stepResult = await ExecuteStepAsync(step, ctx, services, cancellationToken);
                     stepSw.Stop();
 
-                    // Check if step was denied or failed
                     if (!stepResult.Success)
                     {
                         var msg = stepResult.Error ?? "Step execution failed";
-                        _logger.LogWarning("Step {StepId} ({Target}) denied or failed: {Message}",
-                            step.Id, step.Target, msg);
+                        _logger.LogWarning("Step {StepId} ({Target}) denied or failed: {Message}", step.Id, step.Target, msg);
 
                         ctx.Records.Add(new ExecutionRecord
                         {
@@ -96,18 +94,23 @@ public class ExecutionRuntime : IExecutionRuntime
                             DurationMs = stepSw.Elapsed.TotalMilliseconds
                         });
 
-                        _logger.LogInformation("Plan execution halted at step {StepIndex} ({Target}): {Message}",
-                            i, step.Target, msg);
                         return new ExecutionResult { Success = false, Error = msg, StepIndex = i, StepId = step.Id };
                     }
 
-                    // Handle successful step execution.
                     output = stepResult.Output;
                     var outputKey = step.OutputKey ?? step.Target;
+                    var stateChanges = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [outputKey] = output
+                    };
+
                     ctx.State[outputKey] = output;
 
                     foreach (var (key, value) in stepResult.Outputs)
+                    {
                         ctx.State[key] = value;
+                        stateChanges[key] = value;
+                    }
 
                     ctx.Records.Add(new ExecutionRecord
                     {
@@ -118,19 +121,19 @@ public class ExecutionRuntime : IExecutionRuntime
                         Target = step.Target,
                         Input = ctx.GetInput(),
                         Output = output,
+                        OutputKey = outputKey,
+                        StateChanges = stateChanges,
                         Success = true,
                         Timestamp = stepStart,
                         DurationMs = stepSw.Elapsed.TotalMilliseconds
                     });
 
-                    _logger.LogInformation("Step {StepId} ({Target}) completed in {Ms:F1}ms",
-                        step.Id, step.Target, stepSw.Elapsed.TotalMilliseconds);
+                    _logger.LogInformation("Step {StepId} ({Target}) completed in {Ms:F1}ms", step.Id, step.Target, stepSw.Elapsed.TotalMilliseconds);
                 }
                 catch (OperationCanceledException)
                 {
                     stepSw.Stop();
                     var msg = $"Execution cancelled at step {step.Id} ({step.Target})";
-                    _logger.LogWarning(msg);
 
                     ctx.Records.Add(new ExecutionRecord
                     {
@@ -172,9 +175,8 @@ public class ExecutionRuntime : IExecutionRuntime
                 }
             }
 
-            // Append summary output when enabled.
-            if (ctx.Options.GenerateJobSummary && ctx.Options.CollectMetrics)
-                output = AppendSummary(output, ctx, plan.Name);
+            if (services.Options.GenerateJobSummary && services.Options.CollectMetrics)
+                output = AppendSummary(output, ctx, plan.Name, services.Options.IncludeDetailedMetrics);
 
             sw.Stop();
             _logger.LogInformation("Plan '{PlanName}' completed in {Ms:F1}ms", plan.Name, sw.Elapsed.TotalMilliseconds);
@@ -182,9 +184,7 @@ public class ExecutionRuntime : IExecutionRuntime
         }
         catch (OperationCanceledException)
         {
-            var error = "Execution was cancelled";
-            _logger.LogWarning(error);
-            return new ExecutionResult { Success = false, Error = error };
+            return new ExecutionResult { Success = false, Error = "Execution was cancelled" };
         }
         catch (Exception ex)
         {
@@ -192,75 +192,22 @@ public class ExecutionRuntime : IExecutionRuntime
             _logger.LogError(ex, error);
             return new ExecutionResult { Success = false, Error = error };
         }
-    }
-
-    /// <summary>
-    /// Executes a forked run request using replay hydration.
-    /// </summary>
-    public async Task<ExecutionResult> ForkAsync(ExecutionForkRequest request, CancellationToken cancellationToken = default)
-    {
-        var sw = Stopwatch.StartNew();
-        try
+        finally
         {
-            if (request == null)
-                return Fail("Fork request cannot be null");
-            if (string.IsNullOrWhiteSpace(request.SourceRunId))
-                return Fail("SourceRunId is required for fork execution");
-            if (request.Context == null)
-                return Fail("Fork request context cannot be null");
-            if (request.Plan == null)
-                return Fail("Fork request plan cannot be null");
-
-            var ctx = request.Context;
-
-            var replayResult = await ForkReplayHelper.LoadReplayAsync(request.SourceRunId, cancellationToken);
-            if (!replayResult.Success)
-                return Fail(replayResult.Error ?? "Failed to load replay data");
-
-            if (!ForkReplayHelper.TryHydrateContext(ctx, replayResult.Events, request.EventIndex, out var hydrateError))
-                return Fail(hydrateError);
-
-            ctx.State["fork.sourceRunId"] = request.SourceRunId;
-            ctx.State["fork.eventIndex"] = request.EventIndex;
-            ctx.ReplayMode = request.ReplayMode;
-
-            if (request.ReplayMode != ReplayMode.None)
-            {
-                ctx.ReplaySource = ForkReplayHelper.BuildReplaySource(request.SourceRunId, ctx.RunId, request.EventIndex);
-                if (ctx.ReplaySource == null)
-                    return Fail($"Unable to build replay source for run '{request.SourceRunId}'");
-            }
-
-            return await RunAsync(
-                new ExecutionRunRequest { Plan = request.Plan, Context = ctx },
-                cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            var error = "Fork execution was cancelled";
-            _logger.LogWarning(error);
-            return new ExecutionResult { Success = false, Error = error };
-        }
-        catch (Exception ex)
-        {
-            var error = $"Unexpected error in fork execution: {ex.Message}";
-            _logger.LogError(ex, error);
-            return new ExecutionResult { Success = false, Error = error };
+            if (activeContext != null)
+                await PersistRecordsAsync(activeContext, cancellationToken);
         }
     }
 
-    /// <summary>
-    /// Resolves, authorizes, and executes a single step.
-    /// </summary>
     private async Task<StepExecutionResult> ExecuteStepAsync(
         ExecutionStep step,
         ExecutionContext ctx,
+        ExecutionRuntimeServices services,
         CancellationToken ct)
     {
-        // Resolve step inputs from static values and bindings.
         var resolvedInputs = StepInputResolver.ResolveInputs(step, ctx);
+        ctx.State["input"] = StepInputResolver.GetInputString(resolvedInputs, "input");
 
-        // Evaluate policy for the step.
         var stepMetadata = new ExecutionStepMetadata
         {
             StepId = step.Id,
@@ -268,7 +215,7 @@ public class ExecutionRuntime : IExecutionRuntime
             Target = step.Target
         };
 
-        var policyDecision = ctx.PolicyEngine.EvaluateStep(stepMetadata, resolvedInputs, ctx);
+        var policyDecision = services.PolicyEngine.EvaluateStep(stepMetadata, resolvedInputs, ctx);
 
         if (!policyDecision.Allowed)
         {
@@ -282,69 +229,59 @@ public class ExecutionRuntime : IExecutionRuntime
             };
         }
 
-        // Dispatch to the matching step executor.
         if (step.Type == "tool")
-        {
-            return await ExecuteToolStepAsync(step, resolvedInputs, ctx, ct);
-        }
+            return await ExecuteToolStepAsync(step, resolvedInputs, services, ctx, ct);
 
         if (step.Type == "agent")
         {
-            if (ctx.AgentManager == null)
+            if (services.AgentManager == null)
                 throw new InvalidOperationException($"AgentManager is required to execute agent step '{step.Id}'");
 
-            var agent = ctx.AgentManager.GetByName(step.Target)
+            var agent = services.AgentManager.GetByName(step.Target)
                 ?? throw new InvalidOperationException($"Agent not found: '{step.Target}'");
 
-            return await agent.ExecuteAsync(ctx, ct);
+            return await agent.ExecuteAsync(resolvedInputs, ctx, ct);
         }
 
         throw new InvalidOperationException($"Unknown step type: '{step.Type}'");
     }
 
-    /// <summary>
-    /// Orchestrates tool execution and returns the step output.
-    /// </summary>
     private async Task<StepExecutionResult> ExecuteToolStepAsync(
         ExecutionStep step,
         ImmutableDictionary<string, object?> resolvedInputs,
+        ExecutionRuntimeServices services,
         ExecutionContext ctx,
         CancellationToken ct)
     {
-        // Resolve the primary tool input.
         var input = StepInputResolver.GetInputString(resolvedInputs, "input");
+        ctx.State["input"] = input;
 
-        // Generate a deterministic call identifier.
         var stepIndex = ctx.State.TryGetValue("stepIndex", out var stepIndexValue)
             ? stepIndexValue?.ToString() ?? string.Empty
             : string.Empty;
+
         var callId = DeterministicCallId.Generate(ctx.RunId, stepIndex, step.Target, input);
+        var replayKey = DeterministicCallId.GenerateReplayKey(stepIndex, step.Target, input);
 
-        // Resolve the target tool.
-        if (!ctx.Tools.TryGetValue(step.Target, out var tool))
-        {
-            var msg = $"Tool not found: {step.Target}";
-            return new StepExecutionResult
-            {
-                Success = false,
-                Error = msg
-            };
-        }
-
-        var call = new ToolCall { CallId = callId, ToolName = step.Target, JsonArgs = input };
-
-        // Load replay output when available.
         ToolResult toolResult;
-
-        if ((ctx.ReplayMode == ReplayMode.Full || ctx.ReplayMode == ReplayMode.ToolsOnly)
-            && ctx.ReplaySource != null
-            && ctx.ReplaySource.TryGetToolResult(call.CallId, out var replayedResult))
+        if ((services.ReplayMode == ReplayMode.Full || services.ReplayMode == ReplayMode.ToolsOnly)
+            && services.ReplayToolResults.TryGetValue(replayKey, out var replayedResult))
         {
-            toolResult = replayedResult;
+            toolResult = new ToolResult
+            {
+                CallId = callId,
+                Success = replayedResult.Success,
+                Error = replayedResult.Error,
+                JsonResult = replayedResult.JsonResult
+            };
         }
         else
         {
-            // Execute the tool when replay data is not available.
+            if (!services.Tools.TryGetValue(step.Target, out var tool))
+            {
+                return new StepExecutionResult { Success = false, Error = $"Tool not found: {step.Target}" };
+            }
+
             ct.ThrowIfCancellationRequested();
 
             try
@@ -352,7 +289,7 @@ public class ExecutionRuntime : IExecutionRuntime
                 var output = await tool.ExecuteAsync(input);
                 toolResult = new ToolResult
                 {
-                    CallId = call.CallId,
+                    CallId = callId,
                     Success = true,
                     JsonResult = output
                 };
@@ -361,7 +298,7 @@ public class ExecutionRuntime : IExecutionRuntime
             {
                 toolResult = new ToolResult
                 {
-                    CallId = call.CallId,
+                    CallId = callId,
                     Success = false,
                     Error = ex.Message,
                     JsonResult = string.Empty
@@ -369,17 +306,13 @@ public class ExecutionRuntime : IExecutionRuntime
             }
         }
 
-        // Return the normalized step result.
         if (!toolResult.Success)
             throw new InvalidOperationException(toolResult.Error ?? $"Tool '{step.Target}' failed");
 
         return new StepExecutionResult { Success = true, Output = toolResult.JsonResult };
     }
 
-    /// <summary>
-    /// Appends execution metrics to output text.
-    /// </summary>
-    private static string AppendSummary(string output, ExecutionContext ctx, string planName)
+    private static string AppendSummary(string output, ExecutionContext ctx, string planName, bool includeDetailedMetrics)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"--- Plan Summary: {planName} ---");
@@ -388,7 +321,7 @@ public class ExecutionRuntime : IExecutionRuntime
         foreach (var r in ctx.Records)
         {
             total += r.DurationMs;
-            if (ctx.Options.IncludeDetailedMetrics)
+            if (includeDetailedMetrics)
                 sb.AppendLine($"  - {r.StepId} ({r.Target}): {r.DurationMs:F2} ms");
         }
 
@@ -396,9 +329,36 @@ public class ExecutionRuntime : IExecutionRuntime
         return $"{output}\n\n{sb}";
     }
 
-    /// <summary>
-    /// Creates a failed execution result.
-    /// </summary>
     private static ExecutionResult Fail(string? error)
         => new() { Success = false, Error = error };
+
+    private static async Task PersistRecordsAsync(ExecutionContext ctx, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ExecutionRecordStore.SaveAsync(ctx.RunId, ctx.Records, cancellationToken);
+        }
+        catch
+        {
+            // Persistence failures should not mask execution results.
+        }
+    }
+
+    private static void PublishAvailableAgents(ExecutionRuntimeServices services, ExecutionContext context)
+    {
+        if (services.AgentManager == null)
+            return;
+
+        var agents = services.AgentManager
+            .GetAllAgents()
+            .Where(a => !a.Name.Equals("PlannerAgent", StringComparison.OrdinalIgnoreCase))
+            .Select(a => a.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (agents.Count == 0)
+            return;
+
+        context.State["AvailableAgents"] = string.Join(Environment.NewLine, agents.Select(a => $"- {a}"));
+    }
 }

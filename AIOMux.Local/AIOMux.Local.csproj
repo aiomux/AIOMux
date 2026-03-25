@@ -20,4 +20,12 @@
     <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Commands\" />
+    <Folder Include="Config\" />
+    <Folder Include="Examples\plans\" />
+    <Folder Include="Gauntlets\Tools\" />
+    <Folder Include="Skills\" />
+  </ItemGroup>
+
 </Project>

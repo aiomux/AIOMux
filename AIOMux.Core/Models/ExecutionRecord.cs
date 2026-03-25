@@ -2,7 +2,7 @@ namespace AIOMux.Core.Models;
 
 /// <summary>
 /// Single native execution trace model capturing the result of a step execution.
-/// Serves as the authoritative record for all step executions, denials, and failures.
+/// Serves as the authoritative record for all step executions, denials, failures, and replay/fork reconstruction.
 /// </summary>
 public sealed class ExecutionRecord
 {
@@ -40,6 +40,17 @@ public sealed class ExecutionRecord
     /// Output produced by the step.
     /// </summary>
     public object? Output { get; set; }
+
+    /// <summary>
+    /// Primary state key receiving Output when the step succeeds.
+    /// </summary>
+    public string? OutputKey { get; set; }
+
+    /// <summary>
+    /// All state mutations written by this step when it succeeds.
+    /// Key is the state key and value is the written value.
+    /// </summary>
+    public Dictionary<string, object?> StateChanges { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether the step completed successfully.

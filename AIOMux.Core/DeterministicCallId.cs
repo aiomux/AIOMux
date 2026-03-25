@@ -14,6 +14,14 @@ internal static class DeterministicCallId
         return Convert.ToHexString(hash);
     }
 
+    public static string GenerateReplayKey(string stepIndex, string toolName, string jsonArgs)
+    {
+        var normalizedArgs = NormalizeJsonArgs(jsonArgs);
+        var input = $"{stepIndex}:{toolName}:{normalizedArgs}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(hash);
+    }
+
     public static string NormalizeJsonArgs(string jsonArgs)
     {
         try

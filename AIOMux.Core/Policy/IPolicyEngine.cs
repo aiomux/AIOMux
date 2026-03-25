@@ -19,17 +19,6 @@ public interface IPolicyEngine
         ExecutionStepMetadata stepMetadata,
         IReadOnlyDictionary<string, object?> resolvedInputs,
         ExecutionContext context);
-
-    /// <summary>
-    /// Evaluates whether a tool call is allowed (for backward compatibility and detailed tool policies).
-    /// Used specifically for tool execution after step-level policy passes.
-    /// </summary>
-    /// <param name="call">The tool call details</param>
-    /// <param name="context">The current execution context</param>
-    /// <returns>A decision indicating whether the tool call is allowed</returns>
-    PolicyDecision EvaluateToolCall(ToolCall call, ExecutionContext context) =>
-        // Default implementation: if EvaluateStep passed for this tool, allow the call
-        PolicyDecision.Allow();
 }
 
 /// <summary>

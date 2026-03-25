@@ -1,176 +1,179 @@
 using AIOMux.Core.Models;
-using System.Text.Json;
 
 namespace AIOMux.Core.Replay;
 
 internal static class ForkReplayHelper
 {
-    public static async Task<ReplayResult> LoadReplayAsync(string runId, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var engine = new ReplayEngine();
-        return await engine.ReplayAsync(runId);
-    }
+    public static Task<List<ExecutionRecord>> LoadRecordsAsync(string runId, CancellationToken cancellationToken)
+        => ExecutionRecordStore.LoadAsync(runId, cancellationToken);
 
-    public static bool TryHydrateContext(
+    public static bool TryRebuildStateUpToStep(
+        string sourceRunId,
+        ExecutionPlan plan,
         ExecutionContext context,
-        IReadOnlyList<RuntimeEvent> events,
-        int eventIndex,
+        IReadOnlyList<ExecutionRecord> records,
+        int stepIndex,
+        out ReplayForkSummary? summary,
         out string? error)
     {
         error = null;
+        summary = null;
 
-        if (eventIndex < 0 || eventIndex >= events.Count)
+        if (string.IsNullOrWhiteSpace(sourceRunId))
         {
-            error = $"Event index {eventIndex} is out of range.";
+            error = "Source run id is required for reconstruction.";
             return false;
         }
 
-        for (int i = 0; i <= eventIndex; i++)
+        if (records.Count == 0)
         {
-            var evt = events[i];
+            error = "No execution records are available for reconstruction.";
+            return false;
+        }
 
-            if (evt.Type == "InputReceived")
+        if (plan.Steps.Count == 0)
+        {
+            error = "Execution plan has no steps to reconstruct.";
+            return false;
+        }
+
+        if (stepIndex < 0 || stepIndex >= plan.Steps.Count)
+        {
+            error = $"Fork step index {stepIndex} is outside the plan step range 0..{plan.Steps.Count - 1}.";
+            return false;
+        }
+
+        var selectedRecords = SelectRecordsUpToStep(records, stepIndex);
+        if (selectedRecords.Count == 0)
+        {
+            error = $"No execution records found up to step index {stepIndex}.";
+            return false;
+        }
+
+        foreach (var record in selectedRecords)
+        {
+            if (record.StepIndex < 0 || record.StepIndex >= plan.Steps.Count)
             {
-                var payload = GetPayload<InputReceivedEvent.InputReceivedPayload>(evt);
-                if (payload != null)
-                {
-                    context.Inputs["input"] = payload.Input;
-                    if (!context.State.ContainsKey("user.input.original"))
-                        context.State["user.input.original"] = payload.Input;
-                }
+                error = $"Execution record step index {record.StepIndex} is outside plan bounds.";
+                return false;
             }
-            else if (evt.Type == "StepStarted")
+
+            var expectedStep = plan.Steps[record.StepIndex];
+            if (!string.Equals(expectedStep.Id, record.StepId, StringComparison.OrdinalIgnoreCase))
             {
-                var payload = GetPayload<StepStartedEvent.StepStartedPayload>(evt);
-                if (payload != null)
-                    context.State["stepIndex"] = payload.StepIndex;
+                error = $"Execution record mismatch at index {record.StepIndex}: expected step '{expectedStep.Id}' but found '{record.StepId}'.";
+                return false;
             }
-            else if (evt.Type == "StepCompleted")
+
+            if (!context.Inputs.ContainsKey("input") && record.Input != null)
+                context.Inputs["input"] = record.Input;
+
+            context.State["stepIndex"] = record.StepIndex;
+
+            if (!record.Success)
+                continue;
+
+            if (record.StateChanges.Count > 0)
             {
-                var payload = GetPayload<StepCompletedEvent.StepCompletedPayload>(evt);
-                if (payload != null)
-                {
-                    if (!string.IsNullOrWhiteSpace(payload.StepName))
-                        context.State[payload.StepName] = payload.Output;
-                    context.State["stepIndex"] = payload.StepIndex;
-                }
+                foreach (var (key, value) in record.StateChanges)
+                    context.State[key] = value;
+            }
+            else
+            {
+                var outputKey = string.IsNullOrWhiteSpace(record.OutputKey) ? record.Target : record.OutputKey;
+                if (!string.IsNullOrWhiteSpace(outputKey))
+                    context.State[outputKey] = record.Output;
             }
         }
 
+        context.State["fork.reconstructedStepCount"] = selectedRecords.Count;
+        context.State["fork.reconstructedStepIndex"] = selectedRecords[^1].StepIndex;
+
+        summary = BuildSummary(sourceRunId, stepIndex, selectedRecords);
         return true;
     }
 
-    public static IReplaySource? BuildReplaySource(string sourceRunId, string newRunId, int upToEventIndex = int.MaxValue)
+    public static Dictionary<string, ToolResult> BuildReplayToolResults(IReadOnlyList<ExecutionRecord> records, int upToStepIndex)
     {
-        var filePath = GetRunFilePath(sourceRunId);
-        if (!File.Exists(filePath))
-            return null;
+        var replayResults = new Dictionary<string, ToolResult>(StringComparer.Ordinal);
 
-        var replaySource = new InMemoryReplaySource();
-        var callIdMap = new Dictionary<string, string>(StringComparer.Ordinal);
-        int? currentStepIndex = null;
-        var fallbackIndex = 0;
+        var selectedRecords = SelectRecordsUpToStep(records, upToStepIndex);
 
-        foreach (var line in File.ReadLines(filePath))
+        foreach (var record in selectedRecords)
         {
-            if (string.IsNullOrWhiteSpace(line))
+            if (!record.Success || !record.Type.Equals("tool", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            using var doc = JsonDocument.Parse(line);
-            var eventIndex = doc.RootElement.TryGetProperty("Seq", out var seqElement) && seqElement.ValueKind == JsonValueKind.Number
-                ? seqElement.GetInt32()
-                : fallbackIndex;
+            var input = record.Input?.ToString() ?? string.Empty;
+            var output = record.Output?.ToString() ?? string.Empty;
+            var replayKey = DeterministicCallId.GenerateReplayKey(record.StepIndex.ToString(), record.Target, input);
 
-            fallbackIndex++;
-
-            if (eventIndex > upToEventIndex)
-                continue;
-
-            if (!doc.RootElement.TryGetProperty("Type", out var typeElement))
-                continue;
-
-            var eventType = typeElement.GetString();
-            if (string.Equals(eventType, "StepStarted", StringComparison.Ordinal))
+            replayResults[replayKey] = new ToolResult
             {
-                if (TryGetPayloadProperty(doc.RootElement, "StepIndex", out var stepIndexElement))
-                    currentStepIndex = stepIndexElement.GetInt32();
-            }
-            else if (string.Equals(eventType, "StepCompleted", StringComparison.Ordinal))
-            {
-                if (TryGetPayloadProperty(doc.RootElement, "StepIndex", out var stepIndexElement))
-                    currentStepIndex = stepIndexElement.GetInt32();
-            }
-            else if (string.Equals(eventType, "ToolProposed", StringComparison.Ordinal))
-            {
-                if (!doc.RootElement.TryGetProperty("Payload", out var payloadElement))
-                    continue;
-
-                if (!payloadElement.TryGetProperty("CallId", out var callIdElement) ||
-                    !payloadElement.TryGetProperty("ToolName", out var toolNameElement) ||
-                    !payloadElement.TryGetProperty("JsonArgs", out var jsonArgsElement))
-                    continue;
-
-                var oldCallId = callIdElement.GetString();
-                var toolName = toolNameElement.GetString();
-                var jsonArgs = jsonArgsElement.GetString();
-
-                if (string.IsNullOrWhiteSpace(oldCallId) || string.IsNullOrWhiteSpace(toolName) || jsonArgs == null)
-                    continue;
-
-                var stepIndexText = currentStepIndex?.ToString() ?? string.Empty;
-                var newCallId = DeterministicCallId.Generate(newRunId, stepIndexText, toolName, jsonArgs);
-                callIdMap[oldCallId] = newCallId;
-            }
-            else if (string.Equals(eventType, "ToolResult", StringComparison.Ordinal))
-            {
-                if (!doc.RootElement.TryGetProperty("Result", out var resultElement))
-                    continue;
-
-                if (!resultElement.TryGetProperty("CallId", out var callIdElement))
-                    continue;
-
-                var oldCallId = callIdElement.GetString();
-                if (string.IsNullOrWhiteSpace(oldCallId) || !callIdMap.TryGetValue(oldCallId, out var newCallId))
-                    continue;
-
-                var result = resultElement.Deserialize<ToolResult>();
-                if (result == null)
-                    continue;
-
-                replaySource.AddToolResult(newCallId, new ToolResult
-                {
-                    CallId = newCallId,
-                    Success = result.Success,
-                    Error = result.Error,
-                    JsonResult = result.JsonResult
-                });
-            }
+                CallId = replayKey,
+                Success = true,
+                JsonResult = output,
+                Error = null
+            };
         }
 
-        return replaySource;
+        return replayResults;
     }
 
-    private static T? GetPayload<T>(RuntimeEvent evt)
-    {
-        if (evt.Payload is JsonElement element)
-            return element.Deserialize<T>();
-        return evt.Payload is T typed ? typed : default;
-    }
+    private static List<ExecutionRecord> SelectRecordsUpToStep(IReadOnlyList<ExecutionRecord> records, int upToStepIndex)
+        => records
+            .Where(r => r.StepIndex <= upToStepIndex)
+            .OrderBy(r => r.StepIndex)
+            .ThenBy(r => r.Timestamp)
+            .ToList();
 
-    private static bool TryGetPayloadProperty(JsonElement root, string propertyName, out JsonElement value)
+    private static ReplayForkSummary BuildSummary(string sourceRunId, int stepIndex, IReadOnlyList<ExecutionRecord> selectedRecords)
     {
-        value = default;
-        return root.TryGetProperty("Payload", out var payloadElement) &&
-               payloadElement.TryGetProperty(propertyName, out value);
-    }
+        var summary = new ReplayForkSummary
+        {
+            SourceRunId = sourceRunId,
+            ForkStepIndex = stepIndex,
+            ReconstructedRecordCount = selectedRecords.Count,
+            LastReconstructedStepIndex = selectedRecords[^1].StepIndex,
+            SuccessfulStepCount = selectedRecords.Count(r => r.Success),
+            FailedStepCount = selectedRecords.Count(r => !r.Success),
+            PolicyDeniedStepCount = selectedRecords.Count(r => !string.IsNullOrWhiteSpace(r.PolicyDenyReason)),
+            ReplayedToolCallCount = selectedRecords.Count(r => r.Success && r.Type.Equals("tool", StringComparison.OrdinalIgnoreCase)),
+            TotalDurationMs = selectedRecords.Sum(r => r.DurationMs)
+        };
 
-    private static string GetRunFilePath(string runId)
-    {
-        var runsDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".aiomux", "runs");
-        return Path.Combine(runsDirectory, $"{runId}.jsonl");
+        foreach (var record in selectedRecords)
+        {
+            summary.Steps.Add(new ReplayStepSummary
+            {
+                StepId = record.StepId,
+                StepIndex = record.StepIndex,
+                Type = record.Type,
+                Target = record.Target,
+                Success = record.Success,
+                DurationMs = record.DurationMs,
+                Error = record.Error,
+                PolicyDenyReason = record.PolicyDenyReason
+            });
+
+            if (!record.Type.Equals("tool", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var input = record.Input?.ToString() ?? string.Empty;
+            summary.ToolCalls.Add(new ReplayToolCallSummary
+            {
+                StepId = record.StepId,
+                StepIndex = record.StepIndex,
+                ToolName = record.Target,
+                ReplayKey = DeterministicCallId.GenerateReplayKey(record.StepIndex.ToString(), record.Target, input),
+                Success = record.Success,
+                Input = input,
+                Output = record.Output?.ToString(),
+                Error = record.Error
+            });
+        }
+
+        return summary;
     }
 }
 
