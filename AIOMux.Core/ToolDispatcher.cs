@@ -36,7 +36,15 @@ public class ToolDispatcher : IToolDispatcher
             }, ct);
 
         // 2. Policy evaluation
-        var policyDecision = _policyEngine.Evaluate(call, context);
+        // Note: Policy is now evaluated at the step level in ExecutionRuntime.
+        // This is a fallback for any direct ToolDispatcher usage (not in active path).
+        var stepMetadata = new ExecutionStepMetadata
+        {
+            StepId = call.CallId,
+            Type = "tool",
+            Target = call.ToolName
+        };
+        var policyDecision = _policyEngine.EvaluateStep(stepMetadata, new Dictionary<string, object?> { ["input"] = call.JsonArgs }, context);
         await _eventSink.RecordAsync(
             new Replay.Models.PolicyEvaluatedEvent
             {

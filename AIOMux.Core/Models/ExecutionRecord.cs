@@ -1,7 +1,8 @@
 namespace AIOMux.Core.Models;
 
 /// <summary>
-/// Captures the result of a single execution step.
+/// Single native execution trace model capturing the result of a step execution.
+/// Serves as the authoritative record for all step executions, denials, and failures.
 /// </summary>
 public sealed class ExecutionRecord
 {
@@ -16,12 +17,17 @@ public sealed class ExecutionRecord
     public string StepId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Step type.
+    /// Zero-based index of the step in the execution plan.
+    /// </summary>
+    public int StepIndex { get; set; }
+
+    /// <summary>
+    /// Step type (e.g., "tool", "agent").
     /// </summary>
     public string Type { get; set; } = string.Empty;
 
     /// <summary>
-    /// Step target.
+    /// Step target (tool name or agent name).
     /// </summary>
     public string Target { get; set; } = string.Empty;
 
@@ -41,9 +47,19 @@ public sealed class ExecutionRecord
     public bool Success { get; set; }
 
     /// <summary>
-    /// Error captured for a failed step.
+    /// Error captured for a failed or denied step.
     /// </summary>
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Reason for policy denial, if applicable. Null if step was not policy-denied.
+    /// </summary>
+    public string? PolicyDenyReason { get; set; }
+
+    /// <summary>
+    /// Hash of the policy that evaluated this step, for audit trail.
+    /// </summary>
+    public string? PolicyHash { get; set; }
 
     /// <summary>
     /// When the record was captured.

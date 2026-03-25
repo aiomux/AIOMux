@@ -11,8 +11,6 @@ namespace AIOMux.Core.Models;
 /// </summary>
 public sealed class ExecutionContext
 {
-    private IToolDispatcher? _toolDispatcher;
-
     // ── Identity ──────────────────────────────────────────────────────────────
 
     /// <summary>Unique identifier for this run.</summary>
@@ -67,55 +65,25 @@ public sealed class ExecutionContext
     /// <summary>Replay source supplying recorded tool results.</summary>
     public IReplaySource? ReplaySource { get; set; }
 
-    // ── Tool dispatch ─────────────────────────────────────────────────────────
+    // ── Policy Engine ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Tool dispatcher with policy enforcement and event recording.
-    /// Lazily initialised with safe defaults when not explicitly set.
+    /// Policy engine for gating step execution.
+    /// Defaults to AllowAll if not explicitly set.
     /// </summary>
-    public IToolDispatcher ToolDispatcher
-    {
-        get => _toolDispatcher ??= new ToolDispatcher(new NullRuntimeEventSink(), new AllowAllPolicyEngine());
-        set => _toolDispatcher = value;
-    }
+    public IPolicyEngine PolicyEngine { get; set; } = new AllowAllPolicyEngine();
 
     // ── Input resolution ──────────────────────────────────────────────────────
 
     /// <summary>
     /// Returns the resolved step input: <c>State["input"]</c> when a binding has set it,
     /// falling back to the entry payload in <c>Inputs["input"]</c>.
+    ///
+    /// Note: This method is maintained for compatibility. Modern code should use
+    /// <see cref="StepInputResolver"/> for explicit input resolution via step bindings.
     /// </summary>
     public string GetInput() =>
         (State.TryGetValue("input", out var s) ? s?.ToString() : null)
         ?? (Inputs.TryGetValue("input", out var i) ? i?.ToString() : null)
         ?? string.Empty;
-
-    // ── Tool execution ────────────────────────────────────────────────────────
-
-    /// <summary>Executes a tool by name, routing through the dispatcher.</summary>
-    public async Task<ToolResult> ExecuteToolAsync(
-        string toolName,
-        string jsonArgs,
-        CancellationToken ct = default)
-    {
-        var stepIndex = State.TryGetValue("stepIndex", out var stepIndexValue)
-            ? stepIndexValue?.ToString() ?? string.Empty
-            : string.Empty;
-
-        var callId = DeterministicCallId.Generate(RunId, stepIndex, toolName, jsonArgs);
-
-        if (!Tools.ContainsKey(toolName))
-        {
-            return new ToolResult
-            {
-                CallId = callId,
-                JsonResult = string.Empty,
-                Success = false,
-                Error = $"Tool not found: {toolName}"
-            };
-        }
-
-        var call = new ToolCall { CallId = callId, ToolName = toolName, JsonArgs = jsonArgs };
-        return await ToolDispatcher.InvokeAsync(call, this, ct);
-    }
 }

@@ -2,6 +2,7 @@ namespace AIOMux.Core.Models;
 
 /// <summary>
 /// Result of executing a single step within a plan.
+/// Includes policy evaluation information for audit trail.
 /// </summary>
 public sealed record StepExecutionResult
 {
@@ -14,6 +15,12 @@ public sealed record StepExecutionResult
     /// <summary>Named outputs produced by the step, keyed by output name.</summary>
     public Dictionary<string, object?> Outputs { get; init; } = new();
 
-    /// <summary>Error message when the step fails.</summary>
+    /// <summary>Error message when the step fails or is denied.</summary>
     public string? Error { get; init; }
+
+    /// <summary>Reason for policy denial, if applicable. Null if step was not denied by policy.</summary>
+    public string? PolicyDenyReason { get; init; }
+
+    /// <summary>Hash of the policy that evaluated this step, for audit trail.</summary>
+    public string? PolicyHash { get; init; }
 }

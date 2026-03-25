@@ -9,25 +9,23 @@ using System.Text;
 namespace AIOMux.Core.Replay;
 
 /// <summary>
-/// Wraps an <see cref="IExecutionRuntime"/> and records execution events to a JSONL run file.
+/// Wraps execution and records events to a JSONL run file.
+/// Injects itself as the event sink so all execution events are captured.
 /// </summary>
 public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
 {
-    private readonly IExecutionRuntime _innerRuntime;
     private readonly RunRecorder _recorder;
-    private readonly ILogger? _logger;
+    private readonly ILoggerFactory? _loggerFactory;
     private readonly bool _enableRecording;
 
     public RecordingAgentRuntime(
-        IExecutionRuntime innerRuntime,
         RunRecorder recorder,
         bool enableRecording = true,
-        ILogger? logger = null)
+        ILoggerFactory? loggerFactory = null)
     {
-        _innerRuntime = innerRuntime ?? throw new ArgumentNullException(nameof(innerRuntime));
         _recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
         _enableRecording = enableRecording;
-        _logger = logger;
+        _loggerFactory = loggerFactory;
     }
 
     public async Task RecordAsync(RuntimeEvent evt, CancellationToken ct)
@@ -36,7 +34,12 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
     public async Task<ExecutionResult> RunAsync(ExecutionRunRequest request, CancellationToken cancellationToken = default)
     {
         if (!_enableRecording)
-            return await _innerRuntime.RunAsync(request, cancellationToken);
+        {
+            // If recording is disabled, use a plain ExecutionRuntime
+            var logger = _loggerFactory?.CreateLogger<ExecutionRuntime>();
+            var runtime = new ExecutionRuntime(logger: logger, eventSink: null);
+            return await runtime.RunAsync(request, cancellationToken);
+        }
 
         var sw = Stopwatch.StartNew();
         string? runId = null;
@@ -44,8 +47,6 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
         try
         {
             var ctx = request.Context ?? new ExecutionContext();
-
-            ctx.ToolDispatcher = new ToolDispatcher(this);
 
             var run = new Run
             {
@@ -69,7 +70,10 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
                 }
             });
 
-            var result = await _innerRuntime.RunAsync(
+            // Create ExecutionRuntime with this recorder as the event sink
+            var logger = _loggerFactory?.CreateLogger<ExecutionRuntime>();
+            var runtime = new ExecutionRuntime(logger: logger, eventSink: this);
+            var result = await runtime.RunAsync(
                 new ExecutionRunRequest { Plan = request.Plan, Context = ctx },
                 cancellationToken);
 
@@ -92,7 +96,12 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
     public async Task<ExecutionResult> ForkAsync(ExecutionForkRequest request, CancellationToken cancellationToken = default)
     {
         if (!_enableRecording)
-            return await _innerRuntime.ForkAsync(request, cancellationToken);
+        {
+            // If recording is disabled, use a plain ExecutionRuntime
+            var logger = _loggerFactory?.CreateLogger<ExecutionRuntime>();
+            var runtime = new ExecutionRuntime(logger: logger, eventSink: null);
+            return await runtime.ForkAsync(request, cancellationToken);
+        }
 
         var sw = Stopwatch.StartNew();
         string? runId = null;
@@ -119,8 +128,6 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
                 ? null
                 : ForkReplayHelper.BuildReplaySource(request.SourceRunId, newRunId);
 
-            ctx.ToolDispatcher = new ToolDispatcher(this, request.PolicyEngine);
-
             var run = new Run
             {
                 RunId = newRunId,
@@ -142,7 +149,10 @@ public class RecordingAgentRuntime : IExecutionRuntime, IRuntimeEventSink
                 }
             });
 
-            var result = await _innerRuntime.RunAsync(
+            // Create ExecutionRuntime with this recorder as the event sink
+            var logger = _loggerFactory?.CreateLogger<ExecutionRuntime>();
+            var runtime = new ExecutionRuntime(logger: logger, eventSink: this);
+            var result = await runtime.RunAsync(
                 new ExecutionRunRequest { Plan = request.Plan, Context = ctx },
                 cancellationToken);
 
