@@ -94,6 +94,13 @@ public class SolutionLoader
             if (!Path.IsPathRooted(definition.Replay.StoragePath))
                 definition.Replay.StoragePath = Path.Combine(_solutionDirectory, definition.Replay.StoragePath);
         }
+
+        // Resolve assembly paths.
+        for (int i = 0; i < definition.Assemblies.Count; i++)
+        {
+            if (!Path.IsPathRooted(definition.Assemblies[i]))
+                definition.Assemblies[i] = Path.Combine(_solutionDirectory, definition.Assemblies[i]);
+        }
     }
 
     /// <summary>
@@ -109,5 +116,11 @@ public class SolutionLoader
 
         if (!string.IsNullOrWhiteSpace(definition.MemoryConfig) && !File.Exists(definition.MemoryConfig))
             throw new FileNotFoundException($"Memory config file not found: {definition.MemoryConfig}");
+
+        foreach (var assemblyPath in definition.Assemblies)
+        {
+            if (!File.Exists(assemblyPath))
+                throw new FileNotFoundException($"Assembly not found: {assemblyPath}");
+        }
     }
 }

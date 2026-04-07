@@ -18,6 +18,7 @@ internal static class Program
         return command switch
         {
             "run" => await RunAsync(commandArgs),
+            "serve" => await ServeAsync(commandArgs),
             "validate" => Validate(commandArgs),
             "replay" => Replay(commandArgs),
             "fork" => Fork(commandArgs),
@@ -38,6 +39,17 @@ internal static class Program
         var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
         var input = args.Length > 1 ? string.Join(' ', args.Skip(1)) : string.Empty;
 
+        try
+        {
+            var validator = new SolutionValidator();
+            await validator.ValidateAsync(solutionJsonPath);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Validation failed: {ex.Message}");
+            return 1;
+        }
+
         Console.WriteLine("Path: SolutionLoader -> SolutionRunner -> ExecutionRuntime");
 
         var runner = new SolutionRunner();
@@ -46,6 +58,51 @@ internal static class Program
         PrintRunSummary(summary);
 
         return summary.Success ? 0 : 1;
+    }
+
+    private static async Task<int> ServeAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("Missing solution path.");
+            PrintUsage();
+            return 1;
+        }
+
+        var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
+
+        try
+        {
+            var validator = new SolutionValidator();
+            await validator.ValidateAsync(solutionJsonPath);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Validation failed: {ex.Message}");
+            return 1;
+        }
+
+        var runner = new SolutionRunner();
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        Console.WriteLine("Serve mode active. Type a line to trigger execution. Press Ctrl+C to stop.");
+
+        try
+        {
+            await runner.ServeAsync(solutionJsonPath, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Serve mode stopped.");
+        }
+
+        return 0;
     }
 
     private static int Validate(string[] args)
@@ -149,6 +206,9 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("run <solution-path> [input]");
         Console.WriteLine("  Executes solution.json via SolutionLoader -> SolutionRunner -> ExecutionRuntime");
+        Console.WriteLine();
+        Console.WriteLine("serve <solution-path>");
+        Console.WriteLine("  Starts serve mode: loads solution and runs connectors until Ctrl+C");
         Console.WriteLine();
         Console.WriteLine("validate <solution-path>");
         Console.WriteLine("  Validates solution.json and referenced files");

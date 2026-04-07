@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Clients", "AIOMux.Cl
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Local", "AIOMux.Local\AIOMux.Local.csproj", "{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Connectors", "AIOMux.Connectors\AIOMux.Connectors.csproj", "{396BA5E6-3D5E-4EFD-9EB0-9B4C2A80BE73}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AIOMux.Tests", "AIOMux.Tests\AIOMux.Tests.csproj", "{DC14C50A-BD1F-EE30-1A36-DFEECE3D3FB7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,14 @@ Global
 		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CF02E24F-901E-B554-8D28-AFAB06CBE7D5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{396BA5E6-3D5E-4EFD-9EB0-9B4C2A80BE73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{396BA5E6-3D5E-4EFD-9EB0-9B4C2A80BE73}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{396BA5E6-3D5E-4EFD-9EB0-9B4C2A80BE73}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{396BA5E6-3D5E-4EFD-9EB0-9B4C2A80BE73}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DC14C50A-BD1F-EE30-1A36-DFEECE3D3FB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC14C50A-BD1F-EE30-1A36-DFEECE3D3FB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC14C50A-BD1F-EE30-1A36-DFEECE3D3FB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC14C50A-BD1F-EE30-1A36-DFEECE3D3FB7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

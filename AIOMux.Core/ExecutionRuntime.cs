@@ -206,7 +206,7 @@ public class ExecutionRuntime : IExecutionRuntime
         CancellationToken ct)
     {
         var resolvedInputs = StepInputResolver.ResolveInputs(step, ctx);
-        ctx.State["input"] = StepInputResolver.GetInputString(resolvedInputs, "input");
+        ctx.State["input"] = StepInputResolver.GetInputString(resolvedInputs, "input", ctx.GetInput());
 
         var stepMetadata = new ExecutionStepMetadata
         {
@@ -253,7 +253,7 @@ public class ExecutionRuntime : IExecutionRuntime
         ExecutionContext ctx,
         CancellationToken ct)
     {
-        var input = StepInputResolver.GetInputString(resolvedInputs, "input");
+        var input = StepInputResolver.GetInputString(resolvedInputs, "input", ctx.GetInput());
         ctx.State["input"] = input;
 
         var stepIndex = ctx.State.TryGetValue("stepIndex", out var stepIndexValue)

@@ -1,9 +1,11 @@
+using AIOMux.Connectors;
 using AIOMux.Core;
 using AIOMux.Core.Builders;
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
 using AIOMux.Core.Policy;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using ExecutionContext = AIOMux.Core.Models.ExecutionContext;
@@ -45,6 +47,51 @@ public class SolutionRunner
     }
 
     /// <summary>
+    /// Loads a solution from its solution.json file without executing it.
+    /// Scans declared assemblies for <c>IAgent</c> and <c>ITool</c> implementations,
+    /// resolves declared connectors, and registers discovered agents and tools into the runtime services.
+    /// </summary>
+    /// <param name="solutionJsonPath">Path to solution.json</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The fully loaded solution with plan, services, and resolved connectors</returns>
+    public async Task<LoadedSolution> LoadAsync(
+        string solutionJsonPath,
+        CancellationToken cancellationToken = default)
+    {
+        _logger?.LogInformation("Loading solution from {Path}", solutionJsonPath);
+        var loader = new SolutionLoader(solutionJsonPath);
+        var solution = loader.Load();
+        loader.ValidateReferences(solution);
+
+        _logger?.LogInformation("Loading execution plan from {Entry}", solution.Entry);
+        var planJson = File.ReadAllText(solution.Entry);
+        var planBuilder = new JsonExecutionPlanBuilder(planJson, planName: solution.Name);
+        var plan = await planBuilder.BuildAsync(cancellationToken);
+
+        var agentManager = _agentManager ?? new AgentManager(_loggerFactory);
+        var services = new ExecutionRuntimeServices
+        {
+            Tools = new Dictionary<string, ITool>(_tools ?? [], StringComparer.OrdinalIgnoreCase),
+            AgentManager = agentManager,
+            Options = BuildExecutionOptions(solution),
+            PolicyEngine = LoadPolicyEngine(solution.PolicyConfig)
+        };
+
+        var connectors = ScanAndRegister(solution, services);
+
+        return new LoadedSolution
+        {
+            Name = solution.Name,
+            Description = solution.Description,
+            WorkingDirectory = solution.WorkingDirectory ?? Path.GetDirectoryName(solution.Entry),
+            EntryAgent = solution.EntryAgent,
+            Plan = plan,
+            Services = services,
+            Connectors = connectors
+        };
+    }
+
+    /// <summary>
     /// Runs a solution from its solution.json file.
     /// </summary>
     /// <param name="solutionJsonPath">Path to solution.json</param>
@@ -63,48 +110,21 @@ public class SolutionRunner
 
         try
         {
-            // Solution folder -> SolutionLoader
-            _logger?.LogInformation("Loading solution from {Path}", solutionJsonPath);
-            var loader = new SolutionLoader(solutionJsonPath);
-            var solution = loader.Load();
-            loader.ValidateReferences(solution);
+            var loaded = await LoadAsync(solutionJsonPath, cancellationToken);
 
-            summary.SolutionName = solution.Name;
-            summary.SolutionDescription = solution.Description;
+            summary.SolutionName = loaded.Name;
+            summary.SolutionDescription = loaded.Description;
+            summary.PlanName = loaded.Plan.Name;
+            summary.PlanSource = loaded.Plan.Source;
+            summary.StepCount = loaded.Plan.Steps.Count;
 
-            // Solution entry -> ExecutionPlan
-            _logger?.LogInformation("Loading execution plan from {Entry}", solution.Entry);
-            var planJson = File.ReadAllText(solution.Entry);
-            var planBuilder = new JsonExecutionPlanBuilder(planJson, planName: solution.Name);
-            var plan = await planBuilder.BuildAsync(cancellationToken);
-
-            summary.PlanName = plan.Name;
-            summary.PlanSource = plan.Source;
-            summary.StepCount = plan.Steps.Count;
-
-            var executionOptions = new AIOMux.Core.Models.ExecutionOptions
-            {
-                CollectMetrics = solution.ExecutionOptions?.CollectMetrics ?? true,
-                GenerateJobSummary = solution.ExecutionOptions?.GenerateJobSummary ?? true,
-                IncludeDetailedMetrics = solution.ExecutionOptions?.IncludeDetailedMetrics ?? false
-            };
-
-            // ExecutionContext + runtime services -> ExecutionRuntime
             _logger?.LogInformation("Creating execution context");
             var ctx = new ExecutionContext
             {
                 RunId = Guid.NewGuid().ToString(),
-                WorkingDirectory = solution.WorkingDirectory ?? Path.GetDirectoryName(solution.Entry)
+                WorkingDirectory = loaded.WorkingDirectory,
+                Services = loaded.Services
             };
-
-            var services = new ExecutionRuntimeServices
-            {
-                Tools = _tools ?? new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase),
-                AgentManager = _agentManager,
-                Options = executionOptions,
-                PolicyEngine = LoadPolicyEngine(solution.PolicyConfig)
-            };
-            ctx.Services = services;
 
             ctx.Inputs["input"] = input;
             if (additionalInputs != null)
@@ -114,11 +134,11 @@ public class SolutionRunner
             }
 
             _logger?.LogInformation("Starting execution of plan '{PlanName}' with {StepCount} steps",
-                plan.Name, plan.Steps.Count);
+                loaded.Plan.Name, loaded.Plan.Steps.Count);
 
             var runtimeLogger = _loggerFactory?.CreateLogger<ExecutionRuntime>();
             var runtime = new ExecutionRuntime(logger: runtimeLogger);
-            var result = await runtime.ExecuteAsync(plan, ctx, cancellationToken);
+            var result = await runtime.ExecuteAsync(loaded.Plan, ctx, cancellationToken);
 
             sw.Stop();
 
@@ -132,10 +152,9 @@ public class SolutionRunner
 
             if (result.Success)
                 _logger?.LogInformation("Solution '{SolutionName}' completed successfully in {Ms:F0}ms",
-                    solution.Name, sw.Elapsed.TotalMilliseconds);
+                    loaded.Name, sw.Elapsed.TotalMilliseconds);
             else
-                _logger?.LogError("Solution '{SolutionName}' failed: {Error}",
-                    solution.Name, result.Error);
+                _logger?.LogError("Solution '{SolutionName}' failed: {Error}", loaded.Name, result.Error);
 
             return summary;
         }
@@ -148,6 +167,64 @@ public class SolutionRunner
             summary.DurationMs = sw.Elapsed.TotalMilliseconds;
             return summary;
         }
+    }
+
+    /// <summary>
+    /// Loads a solution and starts all discovered connectors in serve mode.
+    /// Each connector runs until the cancellation token is signalled.
+    /// </summary>
+    /// <param name="solutionJsonPath">Path to solution.json</param>
+    /// <param name="cancellationToken">Token used to stop the serve loop</param>
+    public async Task ServeAsync(
+        string solutionJsonPath,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadAsync(solutionJsonPath, cancellationToken);
+
+        if (loaded.Connectors.Count == 0)
+        {
+            Console.Error.WriteLine("No connectors found in solution. Nothing to serve.");
+            return;
+        }
+
+        var runtimeLogger = _loggerFactory?.CreateLogger<ExecutionRuntime>();
+        var runtime = new ExecutionRuntime(logger: runtimeLogger);
+
+        _logger?.LogInformation("Starting {Count} connector(s) in serve mode", loaded.Connectors.Count);
+
+        var tasks = loaded.Connectors
+            .Select(resolved =>
+            {
+                var context = new ConnectorContext(
+                    runtime,
+                    loaded.Plan,
+                    loaded.Services,
+                    loaded.EntryAgent,
+                    resolved.Declaration.Config,
+                    (evt, result) =>
+                    {
+                        if (result.Success)
+                        {
+                            var text = !string.IsNullOrWhiteSpace(result.Output)
+                                ? result.Output.Trim()
+                                : evt.Payload?.ToString()?.Trim();
+
+                            if (string.IsNullOrWhiteSpace(text))
+                                text = "<no output>";
+
+                            Console.WriteLine($"[{resolved.Declaration.Name}] {text}");
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Connector execution failed ({resolved.Declaration.Name}): {result.Error}");
+                        }
+                    });
+
+                return resolved.Connector.StartAsync(context, cancellationToken);
+            })
+            .ToList();
+
+        await Task.WhenAll(tasks);
     }
 
     /// <summary>
@@ -183,6 +260,99 @@ public class SolutionRunner
             return new AllowAllPolicyEngine();
         }
     }
+
+    /// <summary>
+    /// Registers built-in and assembly-provided agents and tools, then resolves declared connectors.
+    /// </summary>
+    private List<ResolvedConnector> ScanAndRegister(SolutionDefinition solution, ExecutionRuntimeServices services)
+    {
+        foreach (var agent in ScanAssemblyFor<IAgent>(typeof(IAgent).Assembly, _logger))
+        {
+            services.AgentManager?.Register(agent);
+            _logger?.LogInformation("Discovered built-in agent '{Name}'", agent.Name);
+        }
+
+        foreach (var assemblyPath in solution.Assemblies)
+        {
+            foreach (var agent in ScanAssemblyFor<IAgent>(assemblyPath, _logger))
+            {
+                services.AgentManager?.Register(agent);
+                _logger?.LogInformation("Discovered agent '{Name}' from {Path}", agent.Name, assemblyPath);
+            }
+
+            foreach (var tool in ScanAssemblyFor<ITool>(assemblyPath, _logger))
+            {
+                services.Tools[tool.Name] = tool;
+                _logger?.LogInformation("Discovered tool '{Name}' from {Path}", tool.Name, assemblyPath);
+            }
+        }
+
+        if (solution.Connectors.Count == 0)
+            return [];
+
+        var resolved = new List<ResolvedConnector>();
+        foreach (var declaration in solution.Connectors)
+        {
+            var connector = BuiltInConnectorRegistry.Create(declaration.Type);
+            resolved.Add(new ResolvedConnector
+            {
+                Connector = connector,
+                Declaration = declaration
+            });
+            _logger?.LogInformation("Resolved connector '{Name}' (type '{Type}')", declaration.Name, declaration.Type);
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// Scans a pre-loaded assembly and returns all non-abstract instances of <typeparamref name="T"/>
+    /// that can be created with a parameterless constructor.
+    /// </summary>
+    private static IEnumerable<T> ScanAssemblyFor<T>(Assembly assembly, ILogger? logger)
+    {
+        var results = new List<T>();
+        foreach (var type in assembly.GetTypes().Where(t => t.IsClass && !t.IsAbstract && typeof(T).IsAssignableFrom(t)))
+        {
+            try
+            {
+                if (Activator.CreateInstance(type) is T instance)
+                    results.Add(instance);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Could not instantiate {Type}", type.FullName);
+            }
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Loads an assembly and returns all non-abstract instances of <typeparamref name="T"/>
+    /// that can be created with a parameterless constructor.
+    /// </summary>
+    private static IEnumerable<T> ScanAssemblyFor<T>(string assemblyPath, ILogger? logger)
+    {
+        Assembly assembly;
+        try
+        {
+            assembly = Assembly.LoadFrom(assemblyPath);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Could not load assembly for scanning: {Path}", assemblyPath);
+            return [];
+        }
+
+        return ScanAssemblyFor<T>(assembly, logger);
+    }
+
+    private static ExecutionOptions BuildExecutionOptions(SolutionDefinition solution) => new()
+    {
+        CollectMetrics = solution.ExecutionOptions?.CollectMetrics ?? true,
+        GenerateJobSummary = solution.ExecutionOptions?.GenerateJobSummary ?? true,
+        IncludeDetailedMetrics = solution.ExecutionOptions?.IncludeDetailedMetrics ?? false
+    };
 }
 
 /// <summary>

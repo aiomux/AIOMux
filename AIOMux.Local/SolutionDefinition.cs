@@ -55,6 +55,24 @@ public sealed class SolutionDefinition
     /// Additional metadata associated with the solution.
     /// </summary>
     public Dictionary<string, object?> Metadata { get; set; } = new();
+
+    /// <summary>
+    /// Assembly paths to scan for <c>IAgent</c>, <c>ITool</c>, and <c>IConnector</c> implementations.
+    /// Paths are relative to the solution.json file location.
+    /// </summary>
+    public List<string> Assemblies { get; set; } = [];
+
+    /// <summary>
+    /// Default entry agent for connector-originated events.
+    /// When set, overrides the agent inferred from the first agent step in the plan.
+    /// </summary>
+    public string? EntryAgent { get; set; }
+
+    /// <summary>
+    /// Connector declarations for this solution.
+    /// Each entry identifies a connector type to instantiate and start in serve mode.
+    /// </summary>
+    public List<ConnectorDeclaration> Connectors { get; set; } = [];
 }
 
 /// <summary>
@@ -93,4 +111,25 @@ public sealed class ExecutionOptionsConfig
     /// Whether to include detailed metrics in the summary.
     /// </summary>
     public bool IncludeDetailedMetrics { get; set; }
+}
+
+/// <summary>
+/// Declares a connector to instantiate and run for this solution.
+/// </summary>
+public sealed class ConnectorDeclaration
+{
+    /// <summary>
+    /// Connector type identifier. Matched against <c>IConnector.Name</c> on discovered implementations.
+    /// </summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Logical name for this connector instance within the solution.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional connector-specific configuration from the solution manifest.
+    /// </summary>
+    public Dictionary<string, string> Config { get; set; } = new();
 }

@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AIOMux.Clients\AIOMux.Clients.csproj" />
+    <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
+  </ItemGroup>
+
+</Project>

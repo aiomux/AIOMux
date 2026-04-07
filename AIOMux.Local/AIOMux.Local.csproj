@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AIOMux.Clients\AIOMux.Clients.csproj" />
+    <ProjectReference Include="..\AIOMux.Connectors\AIOMux.Connectors.csproj" />
     <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
   </ItemGroup>
 
