@@ -12,6 +12,7 @@ public static class BuiltInAgentRegistry
         new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
         {
             ["echo"] = typeof(EchoAgent),
+            ["gauntlet"] = typeof(GauntletAgent),
             ["PlannerAgent"] = typeof(PlannerAgent)
         };
 
