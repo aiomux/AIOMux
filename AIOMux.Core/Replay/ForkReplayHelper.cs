@@ -4,8 +4,11 @@ namespace AIOMux.Core.Replay;
 
 internal static class ForkReplayHelper
 {
-    public static Task<List<ExecutionRecord>> LoadRecordsAsync(string runId, CancellationToken cancellationToken)
-        => ExecutionRecordStore.LoadAsync(runId, cancellationToken);
+    public static Task<List<ExecutionRecord>> LoadRecordsAsync(
+        string runId,
+        string? workingDirectory,
+        CancellationToken cancellationToken)
+        => ExecutionRecordStore.LoadAsync(runId, workingDirectory, cancellationToken);
 
     public static bool TryRebuildStateUpToStep(
         string sourceRunId,

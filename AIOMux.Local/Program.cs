@@ -20,8 +20,8 @@ internal static class Program
             "run" => await RunAsync(commandArgs),
             "serve" => await ServeAsync(commandArgs),
             "validate" => Validate(commandArgs),
-            "replay" => Replay(commandArgs),
-            "fork" => Fork(commandArgs),
+            "replay" => await ReplayAsync(commandArgs),
+            "fork" => await ForkAsync(commandArgs),
             "help" or "--help" or "-h" => PrintHelpAndExit(),
             _ => UnknownCommand(command)
         };
@@ -133,18 +133,72 @@ internal static class Program
         }
     }
 
-    private static int Replay(string[] args)
+    private static async Task<int> ReplayAsync(string[] args)
     {
-        _ = args;
-        Console.Error.WriteLine("'replay' is reserved for a future command. Use 'run' for now.");
-        return 2;
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("Missing required arguments for replay.");
+            PrintUsage();
+            return 1;
+        }
+
+        var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
+        var sourceRunId = args[1];
+        var input = args.Length > 2 ? string.Join(' ', args.Skip(2)) : null;
+
+        try
+        {
+            var validator = new SolutionValidator();
+            await validator.ValidateAsync(solutionJsonPath);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Validation failed: {ex.Message}");
+            return 1;
+        }
+
+        var runner = new SolutionRunner();
+        var summary = await runner.ReplayAsync(solutionJsonPath, sourceRunId, input);
+        PrintRunSummary(summary);
+
+        return summary.Success ? 0 : 1;
     }
 
-    private static int Fork(string[] args)
+    private static async Task<int> ForkAsync(string[] args)
     {
-        _ = args;
-        Console.Error.WriteLine("'fork' is reserved for a future command. Use 'run' for now.");
-        return 2;
+        if (args.Length < 3)
+        {
+            Console.Error.WriteLine("Missing required arguments for fork.");
+            PrintUsage();
+            return 1;
+        }
+
+        var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
+        var sourceRunId = args[1];
+        if (!int.TryParse(args[2], out var forkStepIndex))
+        {
+            Console.Error.WriteLine("Invalid fork step index. Expected an integer value.");
+            return 1;
+        }
+
+        var input = args.Length > 3 ? string.Join(' ', args.Skip(3)) : null;
+
+        try
+        {
+            var validator = new SolutionValidator();
+            await validator.ValidateAsync(solutionJsonPath);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Validation failed: {ex.Message}");
+            return 1;
+        }
+
+        var runner = new SolutionRunner();
+        var summary = await runner.ForkAsync(solutionJsonPath, sourceRunId, forkStepIndex, input);
+        PrintRunSummary(summary);
+
+        return summary.Success ? 0 : 1;
     }
 
     private static string ResolveSolutionJsonPath(string pathOrFolder)
@@ -213,8 +267,10 @@ internal static class Program
         Console.WriteLine("validate <solution-path>");
         Console.WriteLine("  Validates solution.json and referenced files");
         Console.WriteLine();
-        Console.WriteLine("replay <...>");
-        Console.WriteLine("fork <...>");
-        Console.WriteLine("  Reserved seams for future replay/fork workflows");
+        Console.WriteLine("replay <solution-path> <source-run-id> [input]");
+        Console.WriteLine("  Replays a prior run using persisted execution records");
+        Console.WriteLine();
+        Console.WriteLine("fork <solution-path> <source-run-id> <fork-step-index> [input]");
+        Console.WriteLine("  Reconstructs state at a step and continues execution from that run context");
     }
 }

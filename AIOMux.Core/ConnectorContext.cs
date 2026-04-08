@@ -15,6 +15,7 @@ public sealed class ConnectorContext : IConnectorContext
     private readonly ExecutionPlan _plan;
     private readonly ExecutionRuntimeServices _services;
     private readonly string _defaultEntryAgent;
+    private readonly string? _workingDirectory;
     private readonly Action<ConnectorEvent, ExecutionResult>? _onExecutionCompleted;
 
     /// <inheritdoc />
@@ -28,6 +29,7 @@ public sealed class ConnectorContext : IConnectorContext
     /// When provided, takes precedence over the agent inferred from the first agent step in the plan.
     /// </param>
     /// <param name="config">Connector-specific configuration from the solution manifest.</param>
+    /// <param name="workingDirectory">Optional working directory for connector-triggered runs.</param>
     /// <param name="onExecutionCompleted">Optional callback invoked after runtime execution for a published event.</param>
     public ConnectorContext(
         IExecutionRuntime runtime,
@@ -35,6 +37,7 @@ public sealed class ConnectorContext : IConnectorContext
         ExecutionRuntimeServices services,
         string? entryAgent = null,
         IReadOnlyDictionary<string, string>? config = null,
+        string? workingDirectory = null,
         Action<ConnectorEvent, ExecutionResult>? onExecutionCompleted = null)
     {
         _runtime = runtime;
@@ -44,6 +47,7 @@ public sealed class ConnectorContext : IConnectorContext
             ? entryAgent
             : plan.Steps.FirstOrDefault(s => s.Type == "agent")?.Target ?? string.Empty;
         Config = config ?? new Dictionary<string, string>();
+        _workingDirectory = workingDirectory;
         _onExecutionCompleted = onExecutionCompleted;
     }
 
@@ -62,7 +66,11 @@ public sealed class ConnectorContext : IConnectorContext
             ? _plan
             : BuildSingleAgentPlan(entryAgent);
 
-        var ctx = new ExecutionContext { Services = _services };
+        var ctx = new ExecutionContext
+        {
+            Services = _services,
+            WorkingDirectory = _workingDirectory
+        };
         ctx.Inputs["input"] = evt.Payload?.ToString() ?? string.Empty;
         ctx.State["connector.name"] = evt.ConnectorName;
         ctx.State["connector.eventType"] = evt.EventType;

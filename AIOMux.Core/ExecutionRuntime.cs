@@ -336,7 +336,7 @@ public class ExecutionRuntime : IExecutionRuntime
     {
         try
         {
-            await ExecutionRecordStore.SaveAsync(ctx.RunId, ctx.Records, cancellationToken);
+            await ExecutionRecordStore.SaveAsync(ctx.RunId, ctx.Records, ctx.WorkingDirectory, cancellationToken);
         }
         catch
         {

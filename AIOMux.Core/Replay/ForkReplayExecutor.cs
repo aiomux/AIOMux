@@ -31,7 +31,7 @@ public sealed class ForkReplayExecutor
 
         try
         {
-            var sourceRecords = await ForkReplayHelper.LoadRecordsAsync(sourceRunId, cancellationToken);
+            var sourceRecords = await ForkReplayHelper.LoadRecordsAsync(sourceRunId, context.WorkingDirectory, cancellationToken);
             if (sourceRecords.Count == 0)
                 return new ExecutionResult { Success = false, Error = $"No execution records found for run '{sourceRunId}'" };
 

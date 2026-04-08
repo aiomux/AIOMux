@@ -4,6 +4,7 @@ using AIOMux.Core.Builders;
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
 using AIOMux.Core.Policy;
+using AIOMux.Core.Replay;
 using Microsoft.Extensions.Logging;
 using System.Reflection;
 using System.Text;
@@ -170,6 +171,148 @@ public class SolutionRunner
     }
 
     /// <summary>
+    /// Replays a prior run by reconstructing state up to the final step and executing with replayed tool outputs.
+    /// </summary>
+    /// <param name="solutionJsonPath">Path to solution.json</param>
+    /// <param name="sourceRunId">Source run id to replay from</param>
+    /// <param name="input">Optional input override</param>
+    /// <param name="additionalInputs">Optional additional inputs</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    public async Task<SolutionExecutionSummary> ReplayAsync(
+        string solutionJsonPath,
+        string sourceRunId,
+        string? input = null,
+        Dictionary<string, object?>? additionalInputs = null,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadAsync(solutionJsonPath, cancellationToken);
+        if (loaded.Plan.Steps.Count == 0)
+        {
+            return new SolutionExecutionSummary
+            {
+                SolutionName = loaded.Name,
+                SolutionDescription = loaded.Description,
+                PlanName = loaded.Plan.Name,
+                PlanSource = loaded.Plan.Source,
+                StepCount = 0,
+                Success = false,
+                Error = "Cannot replay a plan with no steps."
+            };
+        }
+
+        var replayStepIndex = loaded.Plan.Steps.Count - 1;
+        return await ExecuteForkLikeRunAsync(
+            loaded,
+            loaded.Plan,
+            sourceRunId,
+            replayStepIndex,
+            input,
+            additionalInputs,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Forks a prior run at a selected step and continues execution using the fork plan.
+    /// </summary>
+    /// <param name="solutionJsonPath">Path to solution.json</param>
+    /// <param name="sourceRunId">Source run id to fork from</param>
+    /// <param name="forkStepIndex">Step index at which to reconstruct state</param>
+    /// <param name="input">Optional input override</param>
+    /// <param name="additionalInputs">Optional additional inputs</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    public async Task<SolutionExecutionSummary> ForkAsync(
+        string solutionJsonPath,
+        string sourceRunId,
+        int forkStepIndex,
+        string? input = null,
+        Dictionary<string, object?>? additionalInputs = null,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadAsync(solutionJsonPath, cancellationToken);
+        var forkPlan = await ExecutionPlanFactory
+            .Fork(loaded.Plan, forkStepIndex)
+            .BuildAsync(cancellationToken);
+
+        return await ExecuteForkLikeRunAsync(
+            loaded,
+            forkPlan,
+            sourceRunId,
+            forkStepIndex,
+            input,
+            additionalInputs,
+            cancellationToken);
+    }
+
+    private async Task<SolutionExecutionSummary> ExecuteForkLikeRunAsync(
+        LoadedSolution loaded,
+        ExecutionPlan plan,
+        string sourceRunId,
+        int stepIndex,
+        string? input,
+        Dictionary<string, object?>? additionalInputs,
+        CancellationToken cancellationToken)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var summary = new SolutionExecutionSummary
+        {
+            SolutionName = loaded.Name,
+            SolutionDescription = loaded.Description,
+            PlanName = plan.Name,
+            PlanSource = plan.Source,
+            StepCount = plan.Steps.Count
+        };
+
+        try
+        {
+            var services = loaded.Services;
+            if (services.ReplayMode == ReplayMode.None)
+                services.ReplayMode = ReplayMode.ToolsOnly;
+
+            var ctx = new ExecutionContext
+            {
+                RunId = Guid.NewGuid().ToString(),
+                WorkingDirectory = loaded.WorkingDirectory,
+                Services = services
+            };
+
+            if (input != null)
+                ctx.Inputs["input"] = input;
+
+            if (additionalInputs != null)
+            {
+                foreach (var (key, value) in additionalInputs)
+                    ctx.Inputs[key] = value;
+            }
+
+            var runtimeLogger = _loggerFactory?.CreateLogger<ExecutionRuntime>();
+            var runtime = new ExecutionRuntime(logger: runtimeLogger);
+            var forkExecutor = new ForkReplayExecutor(runtime);
+            var result = await forkExecutor.ExecuteForkAsync(sourceRunId, stepIndex, plan, ctx, cancellationToken);
+
+            sw.Stop();
+
+            summary.RunId = ctx.RunId;
+            summary.Success = result.Success;
+            summary.Output = result.Output;
+            summary.Error = result.Error;
+            summary.DurationMs = sw.Elapsed.TotalMilliseconds;
+            summary.ExecutedSteps = ctx.Records.Count;
+            summary.Records = ctx.Records.ToList();
+
+            return summary;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _logger?.LogError(ex, "Replay/fork execution failed");
+            summary.Success = false;
+            summary.Error = ex.Message;
+            summary.DurationMs = sw.Elapsed.TotalMilliseconds;
+            return summary;
+        }
+    }
+
+    /// <summary>
     /// Loads a solution and starts all discovered connectors in serve mode.
     /// Each connector runs until the cancellation token is signalled.
     /// </summary>
@@ -201,6 +344,7 @@ public class SolutionRunner
                     loaded.Services,
                     loaded.EntryAgent,
                     resolved.Declaration.Config,
+                    loaded.WorkingDirectory,
                     (evt, result) =>
                     {
                         if (result.Success)
