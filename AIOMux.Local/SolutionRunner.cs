@@ -1,3 +1,4 @@
+using AIOMux.Clients;
 using AIOMux.Connectors;
 using AIOMux.Core;
 using AIOMux.Core.Builders;
@@ -78,7 +79,8 @@ public class SolutionRunner
             PolicyEngine = LoadPolicyEngine(solution.PolicyConfig)
         };
 
-        var connectors = ScanAndRegister(solution, services);
+        var llmProfiles = BuildLlmProfileMap(solution);
+        var connectors = await ScanAndRegisterAsync(solution, services, llmProfiles);
 
         return new LoadedSolution
         {
@@ -392,9 +394,10 @@ public class SolutionRunner
             if (config == null || string.IsNullOrWhiteSpace(config.Type))
                 return new AllowAllPolicyEngine();
 
-            return config.Type.ToLower() switch
+            return config.Type.ToLowerInvariant() switch
             {
                 "allowall" => new AllowAllPolicyEngine(),
+                "tooldenylist" => new ToolDenyListPolicyEngine(ResolveDeniedTools(config.Parameters)),
                 _ => throw new InvalidOperationException($"Unknown policy engine type: {config.Type}")
             };
         }
@@ -405,19 +408,52 @@ public class SolutionRunner
         }
     }
 
+    private static IEnumerable<string> ResolveDeniedTools(Dictionary<string, object?> parameters)
+    {
+        if (!parameters.TryGetValue("denyTools", out var denyTools))
+            return [];
+
+        return ToolDenyListPolicyEngine.ParseDeniedTools(denyTools);
+    }
+
     /// <summary>
     /// Registers built-in and assembly-provided agents and tools, then resolves declared connectors.
+    /// Plugin assemblies are loaded through <see cref="IAgentManager.LoadPluginAsync(string, Dictionary{string, ILLMClient}?, Dictionary{string, object}?)"/>
+    /// so each plugin can resolve its preferred LLM profile.
     /// </summary>
-    private List<ResolvedConnector> ScanAndRegister(SolutionDefinition solution, ExecutionRuntimeServices services)
+    private async Task<List<ResolvedConnector>> ScanAndRegisterAsync(
+        SolutionDefinition solution,
+        ExecutionRuntimeServices services,
+        Dictionary<string, ILLMClient> llmProfiles)
     {
         foreach (var agent in ScanAssemblyFor<IAgent>(typeof(IAgent).Assembly, _logger))
         {
+            if (agent is PlannerAgent)
+                continue;
+
             services.AgentManager?.Register(agent);
             _logger?.LogInformation("Discovered built-in agent '{Name}'", agent.Name);
         }
 
+        llmProfiles.TryGetValue("default", out var defaultLlmClient);
+        services.AgentManager?.Register(new PlannerAgent(defaultLlmClient));
+        _logger?.LogInformation(
+            defaultLlmClient == null
+                ? "Registered PlannerAgent in fallback mode (no default LLM profile configured)."
+                : "Registered PlannerAgent with model '{Model}' from default LLM profile.",
+            defaultLlmClient?.Model);
+
+        foreach (var tool in ScanAssemblyFor<ITool>(typeof(ITool).Assembly, _logger))
+        {
+            services.Tools[tool.Name] = tool;
+            _logger?.LogInformation("Discovered built-in tool '{Name}'", tool.Name);
+        }
+
         foreach (var assemblyPath in solution.Assemblies)
         {
+            if (services.AgentManager != null)
+                await services.AgentManager.LoadPluginAsync(assemblyPath, llmProfiles);
+
             foreach (var agent in ScanAssemblyFor<IAgent>(assemblyPath, _logger))
             {
                 services.AgentManager?.Register(agent);
@@ -447,6 +483,40 @@ public class SolutionRunner
         }
 
         return resolved;
+    }
+
+    private static Dictionary<string, ILLMClient> BuildLlmProfileMap(SolutionDefinition solution)
+    {
+        var profiles = new Dictionary<string, ILLMClient>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, config) in solution.LlmProfiles)
+        {
+            profiles[name] = CreateLlmClient(config);
+        }
+
+        return profiles;
+    }
+
+    private static ILLMClient CreateLlmClient(LlmConfiguration config)
+    {
+        if (string.IsNullOrWhiteSpace(config.Provider))
+            throw new InvalidOperationException("LLM profile must specify a provider.");
+
+        var provider = config.Provider.Trim().ToLowerInvariant();
+        return provider switch
+        {
+            "ollama" => CreateOllamaClient(config),
+            _ => throw new InvalidOperationException($"Unknown LLM provider '{config.Provider}'.")
+        };
+    }
+
+    private static ILLMClient CreateOllamaClient(LlmConfiguration config)
+    {
+        var model = string.IsNullOrWhiteSpace(config.Model) ? "llama3" : config.Model;
+        var endpoint = string.IsNullOrWhiteSpace(config.Endpoint) ? "http://localhost:11434" : config.Endpoint;
+        var maxRequestsPerMinute = config.MaxRequestsPerMinute > 0 ? config.MaxRequestsPerMinute : 60;
+
+        return new OllamaClient(model, maxRequestsPerMinute, endpoint);
     }
 
     /// <summary>

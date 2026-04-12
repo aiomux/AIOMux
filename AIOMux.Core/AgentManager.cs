@@ -76,11 +76,12 @@ public class AgentManager : IAgentManager
     /// <summary>
     /// Loads a single plugin asynchronously.
     /// </summary>
-    /// <param name="assemblyPath">Path to the plugin assembly</param>
-    /// <param name="llmClient">Optional LLM client to provide to the plugin</param>
-    /// <param name="configuration">Optional configuration for the plugin</param>
-    /// <returns>True if the plugin was loaded successfully</returns>
-    public async Task<bool> LoadPluginAsync(string assemblyPath, ILLMClient? llmClient = null, Dictionary<string, object>? configuration = null)
+    /// <param name="assemblyPath">Path to the plugin assembly.</param>
+    /// <param name="llmProfiles">Named LLM client profiles. Each plugin's preferred profile is
+    /// resolved via <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to "default".</param>
+    /// <param name="configuration">Optional configuration for the plugin.</param>
+    /// <returns>True if the plugin was loaded successfully.</returns>
+    public async Task<bool> LoadPluginAsync(string assemblyPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
     {
         try
         {
@@ -98,10 +99,7 @@ public class AgentManager : IAgentManager
                 .ToArray();
 
             if (pluginTypes.Length == 0)
-            {
-                _logger?.LogWarning("No IAgentPlugin implementations found in: {AssemblyPath}", assemblyPath);
                 return false;
-            }
 
             foreach (var pluginType in pluginTypes)
             {
@@ -114,7 +112,6 @@ public class AgentManager : IAgentManager
                         continue;
                     }
 
-                    // Initialize the plugin
                     var initialized = await plugin.InitializeAsync(configuration);
                     if (!initialized)
                     {
@@ -122,8 +119,20 @@ public class AgentManager : IAgentManager
                         continue;
                     }
 
-                    // Create and register the agent
+                    var llmClient = ResolveProfileClient(llmProfiles, plugin.Metadata.PreferredLlmProfile);
+
                     var agent = plugin.CreateAgent(llmClient, configuration);
+
+                    if (!ValidateLlmConstraints(plugin.Metadata, llmClient))
+                    {
+                        _logger?.LogError(
+                            "Plugin '{AgentName}' requires provider='{Provider}' model='{Model}' but the supplied LLM client does not satisfy these constraints. Load aborted.",
+                            plugin.Metadata.Name,
+                            plugin.Metadata.RequiredLlmProvider ?? "(any)",
+                            plugin.Metadata.RequiredLlmModel ?? "(any)");
+                        continue;
+                    }
+
                     Register(agent);
                     _loadedPlugins.Add(plugin);
 
@@ -148,11 +157,11 @@ public class AgentManager : IAgentManager
     /// <summary>
     /// Loads plugins from a directory asynchronously.
     /// </summary>
-    /// <param name="pluginDirectory">Directory containing plugin assemblies</param>
-    /// <param name="llmClient">Optional LLM client to provide to plugins</param>
-    /// <param name="configuration">Optional configuration for plugins</param>
-    /// <returns>Number of plugins successfully loaded</returns>
-    public async Task<int> LoadPluginsFromDirectoryAsync(string pluginDirectory, ILLMClient? llmClient = null, Dictionary<string, object>? configuration = null)
+    /// <param name="pluginDirectory">Directory containing plugin assemblies.</param>
+    /// <param name="llmProfiles">Named LLM client profiles passed through to each plugin.</param>
+    /// <param name="configuration">Optional configuration for plugins.</param>
+    /// <returns>Number of plugins successfully loaded.</returns>
+    public async Task<int> LoadPluginsFromDirectoryAsync(string pluginDirectory, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
     {
         if (!Directory.Exists(pluginDirectory))
         {
@@ -165,10 +174,8 @@ public class AgentManager : IAgentManager
 
         foreach (var pluginFile in pluginFiles)
         {
-            if (await LoadPluginAsync(pluginFile, llmClient, configuration))
-            {
+            if (await LoadPluginAsync(pluginFile, llmProfiles, configuration))
                 loadedCount++;
-            }
         }
 
         _logger?.LogInformation("Loaded {LoadedCount} plugins from directory: {PluginDirectory}",
@@ -203,5 +210,67 @@ public class AgentManager : IAgentManager
 
         _loadedPlugins.Clear();
         _logger?.LogInformation("All plugins have been unloaded");
+    }
+
+    /// <summary>
+    /// Validates that the provided LLM client satisfies the compatibility constraints
+    /// declared in an agent plugin's metadata.
+    /// </summary>
+    /// <param name="metadata">The plugin metadata containing optional constraint fields.</param>
+    /// <param name="llmClient">The LLM client that will be injected into the agent.</param>
+    /// <returns>
+    /// True when no constraints are declared or all constraints are satisfied;
+    /// false when constraints are declared but cannot be verified against the client.
+    /// </returns>
+    private static bool ValidateLlmConstraints(AgentMetadata metadata, ILLMClient? llmClient)
+    {
+        bool hasProviderConstraint = !string.IsNullOrEmpty(metadata.RequiredLlmProvider);
+        bool hasModelConstraint = !string.IsNullOrEmpty(metadata.RequiredLlmModel);
+
+        if (!hasProviderConstraint && !hasModelConstraint)
+            return true;
+
+        // Constraints are declared but no client was provided.
+        if (llmClient == null)
+            return false;
+
+        if (hasProviderConstraint &&
+            !llmClient.Provider.Equals(metadata.RequiredLlmProvider, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (hasModelConstraint && !MatchesModelPattern(metadata.RequiredLlmModel!, llmClient.Model))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Matches a model name against a required pattern.
+    /// A trailing <c>*</c> acts as a prefix wildcard; otherwise an exact case-insensitive match is required.
+    /// </summary>
+    private static bool MatchesModelPattern(string required, string actual)
+    {
+        return required.EndsWith('*')
+            ? actual.StartsWith(required[..^1], StringComparison.OrdinalIgnoreCase)
+            : actual.Equals(required, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Resolves an LLM client from a named profile map.
+    /// Uses <paramref name="preferredProfile"/> first, then falls back to "default".
+    /// Returns null when no profiles are available.
+    /// </summary>
+    private static ILLMClient? ResolveProfileClient(Dictionary<string, ILLMClient>? profiles, string? preferredProfile)
+    {
+        if (profiles == null || profiles.Count == 0)
+            return null;
+
+        var key = preferredProfile ?? "default";
+
+        if (profiles.TryGetValue(key, out var client))
+            return client;
+
+        profiles.TryGetValue("default", out var fallback);
+        return fallback;
     }
 }

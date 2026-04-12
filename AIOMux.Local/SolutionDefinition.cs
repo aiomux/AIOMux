@@ -73,6 +73,14 @@ public sealed class SolutionDefinition
     /// Each entry identifies a connector type to instantiate and start in serve mode.
     /// </summary>
     public List<ConnectorDeclaration> Connectors { get; set; } = [];
+
+    /// <summary>
+    /// Named LLM profiles available to agents in this solution.
+    /// Each key is a profile identifier (for example: "default", "reasoning").
+    /// Agents may declare a preferred profile via <see cref="AgentMetadata.PreferredLlmProfile"/>.
+    /// The <c>"default"</c> key is used when no specific profile is requested.
+    /// </summary>
+    public Dictionary<string, LlmConfiguration> LlmProfiles { get; set; } = [];
 }
 
 /// <summary>
@@ -132,4 +140,35 @@ public sealed class ConnectorDeclaration
     /// Optional connector-specific configuration from the solution manifest.
     /// </summary>
     public Dictionary<string, string> Config { get; set; } = new();
+}
+
+/// <summary>
+/// Optional language model configuration for planner and agent LLM usage.
+/// </summary>
+public sealed class LlmConfiguration
+{
+    /// <summary>
+    /// LLM provider identifier (for example: "ollama" or "none").
+    /// </summary>
+    public string? Provider { get; set; }
+
+    /// <summary>
+    /// Provider endpoint base URL.
+    /// </summary>
+    public string? Endpoint { get; set; }
+
+    /// <summary>
+    /// Model name to use for completions.
+    /// </summary>
+    public string? Model { get; set; }
+
+    /// <summary>
+    /// Optional API key environment variable name.
+    /// </summary>
+    public string? ApiKeyEnvVar { get; set; }
+
+    /// <summary>
+    /// Maximum number of requests allowed per minute.
+    /// </summary>
+    public int MaxRequestsPerMinute { get; set; } = 60;
 }
