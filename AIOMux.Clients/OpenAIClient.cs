@@ -20,15 +20,13 @@ public sealed class OpenAIClient : ILLMClient
     /// Initializes a new instance of the <see cref="OpenAIClient"/> class.
     /// </summary>
     /// <param name="apiKey">OpenAI API key.</param>
-    /// <param name="model">Model name (e.g., gpt-4o-mini).</param>
+    /// <param name="model">Model name (for example: gpt-4o-mini).</param>
     /// <param name="baseUrl">Base URL for the OpenAI API. Defaults to https://api.openai.com/v1.</param>
     /// <param name="maxRequestsPerMinute">Maximum requests per minute for local rate limiting.</param>
     public OpenAIClient(string apiKey, string model = "gpt-4o-mini", string? baseUrl = null, int maxRequestsPerMinute = 60)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
-        {
             throw new ArgumentException("OpenAI API key cannot be null or empty.", nameof(apiKey));
-        }
 
         _model = model;
         _rateLimiter = new RateLimiter(maxRequestsPerMinute);
@@ -37,17 +35,21 @@ public sealed class OpenAIClient : ILLMClient
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
     }
 
-    public Task<string> GenerateAsync(string prompt)
-    {
-        return CompleteAsync(prompt, "You are a helpful assistant.");
-    }
+    /// <inheritdoc/>
+    public string Provider => "openai";
 
+    /// <inheritdoc/>
+    public string Model => _model;
+
+    /// <inheritdoc/>
+    public Task<string> GenerateAsync(string prompt)
+        => CompleteAsync(prompt, "You are a helpful assistant.");
+
+    /// <inheritdoc/>
     public async Task<string> CompleteAsync(string userInput, string systemPrompt)
     {
         if (!_rateLimiter.TryRequest())
-        {
             return "[RATE LIMIT EXCEEDED] Please wait before making more requests.";
-        }
 
         var requestBody = new
         {
@@ -64,9 +66,7 @@ public sealed class OpenAIClient : ILLMClient
         using var response = await _http.PostAsync($"{_baseUrl}/chat/completions", content);
 
         if (!response.IsSuccessStatusCode)
-        {
             return $"[OPENAI ERROR] {response.StatusCode}";
-        }
 
         using var stream = await response.Content.ReadAsStreamAsync();
         using var doc = await JsonDocument.ParseAsync(stream);

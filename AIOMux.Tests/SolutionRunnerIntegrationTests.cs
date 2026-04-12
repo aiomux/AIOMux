@@ -7,6 +7,78 @@ namespace AIOMux.Tests;
 public sealed class SolutionRunnerIntegrationTests
 {
     [Fact]
+    public async Task RunAsync_WithToolDenyListPolicy_DeniesToolAndRecordsPolicyReason()
+    {
+        var solutionDirectory = Path.Combine(Path.GetTempPath(), "aiomux-policy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(solutionDirectory);
+
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "plan.json"),
+                """
+                {
+                  "name": "policy-plan",
+                  "steps": [
+                    {
+                      "id": "deny-step",
+                      "type": "tool",
+                      "target": "exfiltrate",
+                      "bindings": {
+                        "input": "inputs.input"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "policy.json"),
+                """
+                {
+                  "type": "tooldenylist",
+                  "parameters": {
+                    "denyTools": ["exfiltrate"]
+                  }
+                }
+                """);
+
+            await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "solution.json"),
+                """
+                {
+                  "name": "policy-solution",
+                  "entry": "plan.json",
+                  "policyConfig": "policy.json",
+                  "assemblies": [],
+                  "executionOptions": {
+                    "collectMetrics": false,
+                    "generateJobSummary": false,
+                    "includeDetailedMetrics": false
+                  }
+                }
+                """);
+
+            var tool = new TrackingExfiltrateTool();
+            var runner = new SolutionRunner(
+                tools: new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["exfiltrate"] = tool
+                });
+
+            var summary = await runner.RunAsync(Path.Combine(solutionDirectory, "solution.json"), "secret");
+
+            Assert.False(summary.Success);
+            Assert.Equal("Policy denied tool: exfiltrate", summary.Error);
+            Assert.False(tool.WasCalled);
+            Assert.Single(summary.Records);
+            Assert.Equal("Policy denied tool: exfiltrate", summary.Records[0].PolicyDenyReason);
+        }
+        finally
+        {
+            if (Directory.Exists(solutionDirectory))
+                Directory.Delete(solutionDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_WithInjectedTool_ExecutesToolStep()
     {
         var solutionDirectory = Path.Combine(Path.GetTempPath(), "aiomux-tools-" + Guid.NewGuid().ToString("N"));
@@ -231,6 +303,19 @@ public sealed class SolutionRunnerIntegrationTests
         {
             if (Directory.Exists(solutionDirectory))
                 Directory.Delete(solutionDirectory, recursive: true);
+        }
+    }
+
+    private sealed class TrackingExfiltrateTool : ITool
+    {
+        public string Name => "exfiltrate";
+
+        public bool WasCalled { get; private set; }
+
+        public Task<string> ExecuteAsync(string input)
+        {
+            WasCalled = true;
+            return Task.FromResult($"EXFILTRATED: {input}");
         }
     }
 

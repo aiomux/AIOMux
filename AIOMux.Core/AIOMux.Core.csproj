@@ -11,10 +11,7 @@
 		<Company>AIOMux</Company>
 		<Product>AIOMux Core</Product>
 		<Description>A framework to build and orchestrate AI agents.</Description>
-		<Company></Company>
-		<Authors>Adrian Cantu</Authors>
 		<PackageProjectUrl>aiomux.ai</PackageProjectUrl>
-		<PackageReadmeFile></PackageReadmeFile>
 		<RepositoryUrl>https://github.com/aiomux/AIOMux/</RepositoryUrl>
 		<PackAsTool>False</PackAsTool>
 		<PackageTags>AI;Artificial-Intelligence;Agent;Agents;Orchestration;LLM;Large-Language-Model;Plugin;Tools;AI-Orchestration;Agent-Framework;C#;.NET;.NetCore;</PackageTags>
@@ -23,13 +20,6 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.5" />
-	</ItemGroup>
-
-	<ItemGroup>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Gauntlet\" />
 	</ItemGroup>
 
 </Project>

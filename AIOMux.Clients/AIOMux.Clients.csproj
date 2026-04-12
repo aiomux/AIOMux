@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AIOMux.Core" Version="0.3.0" />
+    <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
   </ItemGroup>
 
 </Project>

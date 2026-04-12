@@ -31,6 +31,14 @@ public sealed class BuiltInRegistryTests
     }
 
     [Fact]
+    public void BuiltInAgentRegistry_ResolveType_Gauntlet_ReturnsGauntletAgentType()
+    {
+        var resolvedType = BuiltInAgentRegistry.ResolveType("gauntlet");
+
+        Assert.Equal(typeof(GauntletAgent), resolvedType);
+    }
+
+    [Fact]
     public void BuiltInAgentRegistry_ResolveType_Unknown_ThrowsClearError()
     {
         var ex = Assert.Throws<InvalidOperationException>(() =>

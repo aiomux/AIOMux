@@ -163,11 +163,6 @@ public sealed class LlmConfiguration
     public string? Model { get; set; }
 
     /// <summary>
-    /// Optional API key environment variable name.
-    /// </summary>
-    public string? ApiKeyEnvVar { get; set; }
-
-    /// <summary>
     /// Maximum number of requests allowed per minute.
     /// </summary>
     public int MaxRequestsPerMinute { get; set; } = 60;
