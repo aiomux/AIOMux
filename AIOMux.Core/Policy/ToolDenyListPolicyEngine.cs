@@ -1,9 +1,11 @@
+using AIOMux.Core.Models;
 using System.Text.Json;
 
 namespace AIOMux.Core.Policy;
 
 /// <summary>
-/// Policy engine that denies execution of configured tools.
+/// Policy engine that denies execution of explicitly listed tools by name.
+/// All other tools are allowed regardless of requested operations.
 /// </summary>
 public sealed class ToolDenyListPolicyEngine : IPolicyEngine
 {
@@ -18,16 +20,10 @@ public sealed class ToolDenyListPolicyEngine : IPolicyEngine
         _policyHash = policyHash;
     }
 
-    public PolicyDecision EvaluateStep(
-        ExecutionStepMetadata stepMetadata,
-        IReadOnlyDictionary<string, object?> resolvedInputs,
-        ExecutionContext context)
+    public PolicyDecision Evaluate(ToolCall call, ToolExecutionAnalysis analysis, AgentContext context)
     {
-        if (!string.Equals(stepMetadata.Type, "tool", StringComparison.OrdinalIgnoreCase))
-            return PolicyDecision.Allow(_policyHash);
-
-        if (_deniedTools.Contains(stepMetadata.Target))
-            return PolicyDecision.Deny($"Policy denied tool: {stepMetadata.Target}", _policyHash);
+        if (_deniedTools.Contains(call.ToolName))
+            return PolicyDecision.Deny($"Policy denied tool: {call.ToolName}", _policyHash);
 
         return PolicyDecision.Allow(_policyHash);
     }

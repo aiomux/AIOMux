@@ -1,3 +1,4 @@
+using AIOMux.Core.Dispatch;
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
 using AIOMux.Core.Policy;
@@ -206,31 +207,14 @@ public class ExecutionRuntime : IExecutionRuntime
         CancellationToken ct)
     {
         var resolvedInputs = StepInputResolver.ResolveInputs(step, ctx);
-        ctx.State["input"] = StepInputResolver.GetInputString(resolvedInputs, "input", ctx.GetInput());
-
-        var stepMetadata = new ExecutionStepMetadata
-        {
-            StepId = step.Id,
-            Type = step.Type,
-            Target = step.Target
-        };
-
-        var policyDecision = services.PolicyEngine.EvaluateStep(stepMetadata, resolvedInputs, ctx);
-
-        if (!policyDecision.Allowed)
-        {
-            var msg = policyDecision.DenyReason ?? "Step execution denied by policy.";
-            return new StepExecutionResult
-            {
-                Success = false,
-                Error = msg,
-                PolicyDenyReason = policyDecision.DenyReason,
-                PolicyHash = policyDecision.PolicyHash
-            };
-        }
+        var input = StepInputResolver.GetInputString(resolvedInputs, "input", ctx.GetInput());
+        ctx.State["input"] = input;
 
         if (step.Type == "tool")
+        {
+            // Analysis, policy, and execution are all handled by ToolDispatcher.
             return await ExecuteToolStepAsync(step, resolvedInputs, services, ctx, ct);
+        }
 
         if (step.Type == "agent")
         {
@@ -263,53 +247,31 @@ public class ExecutionRuntime : IExecutionRuntime
         var callId = DeterministicCallId.Generate(ctx.RunId, stepIndex, step.Target, input);
         var replayKey = DeterministicCallId.GenerateReplayKey(stepIndex, step.Target, input);
 
-        ToolResult toolResult;
-        if ((services.ReplayMode == ReplayMode.Full || services.ReplayMode == ReplayMode.ToolsOnly)
-            && services.ReplayToolResults.TryGetValue(replayKey, out var replayedResult))
+        var dispatcher = new ToolDispatcher(
+            services.Tools,
+            services.PolicyEngine,
+            services.ReplayMode,
+            services.ReplayToolResults,
+            _logger);
+
+        var agentContext = new AgentContext { RunId = ctx.RunId };
+        var dispatch = await dispatcher.InvokeAsync(step.Target, input, callId, replayKey, agentContext, ct);
+
+        if (dispatch.PolicyDenied)
         {
-            toolResult = new ToolResult
+            return new StepExecutionResult
             {
-                CallId = callId,
-                Success = replayedResult.Success,
-                Error = replayedResult.Error,
-                JsonResult = replayedResult.JsonResult
+                Success = false,
+                Error = dispatch.PolicyDenyReason ?? "Step execution denied by policy.",
+                PolicyDenyReason = dispatch.PolicyDenyReason,
+                PolicyHash = dispatch.PolicyHash
             };
         }
-        else
-        {
-            if (!services.Tools.TryGetValue(step.Target, out var tool))
-            {
-                return new StepExecutionResult { Success = false, Error = $"Tool not found: {step.Target}" };
-            }
 
-            ct.ThrowIfCancellationRequested();
+        if (!dispatch.ToolResult.Success)
+            throw new InvalidOperationException(dispatch.ToolResult.Error ?? $"Tool '{step.Target}' failed");
 
-            try
-            {
-                var output = await tool.ExecuteAsync(input);
-                toolResult = new ToolResult
-                {
-                    CallId = callId,
-                    Success = true,
-                    JsonResult = output
-                };
-            }
-            catch (Exception ex)
-            {
-                toolResult = new ToolResult
-                {
-                    CallId = callId,
-                    Success = false,
-                    Error = ex.Message,
-                    JsonResult = string.Empty
-                };
-            }
-        }
-
-        if (!toolResult.Success)
-            throw new InvalidOperationException(toolResult.Error ?? $"Tool '{step.Target}' failed");
-
-        return new StepExecutionResult { Success = true, Output = toolResult.JsonResult };
+        return new StepExecutionResult { Success = true, Output = dispatch.ToolResult.JsonResult };
     }
 
     private static string AppendSummary(string output, ExecutionContext ctx, string planName, bool includeDetailedMetrics)

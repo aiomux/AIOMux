@@ -1,37 +1,25 @@
+using AIOMux.Core.Models;
+
 namespace AIOMux.Core.Policy;
 
 /// <summary>
-/// Evaluates whether a step is allowed to execute based on policy.
-/// Policy decisions are made before step execution for both tools and agents.
+/// Evaluates whether a tool invocation is allowed to execute based on policy.
+/// Called by the runtime after <c>ITool.Analyze</c> and before <c>ITool.ExecuteAsync</c>.
+/// Agent steps are not subject to policy evaluation.
 /// </summary>
 public interface IPolicyEngine
 {
     /// <summary>
-    /// Evaluates whether a step is allowed to execute.
+    /// Evaluates a tool invocation against the active policy.
     /// </summary>
-    /// <param name="stepMetadata">Metadata about the step (type, target, id)</param>
-    /// <param name="resolvedInputs">The resolved input values for the step (from bindings + static)</param>
-    /// <param name="context">The current execution context</param>
-    /// <returns>A decision indicating whether the step is allowed, and reason if denied</returns>
-    PolicyDecision EvaluateStep(
-        ExecutionStepMetadata stepMetadata,
-        IReadOnlyDictionary<string, object?> resolvedInputs,
-        ExecutionContext context);
-}
-
-/// <summary>
-/// Metadata about an execution step for policy evaluation.
-/// </summary>
-public class ExecutionStepMetadata
-{
-    /// <summary>Step identifier.</summary>
-    public string StepId { get; init; } = string.Empty;
-
-    /// <summary>Step type: "tool" or "agent".</summary>
-    public string Type { get; init; } = string.Empty;
-
-    /// <summary>Target name (tool name or agent name).</summary>
-    public string Target { get; init; } = string.Empty;
+    /// <param name="call">The tool and input being invoked.</param>
+    /// <param name="analysis">
+    /// Operation analysis produced by <c>ITool.Analyze</c>.
+    /// For tools not present in the registry a synthetic unrecognized analysis is supplied.
+    /// </param>
+    /// <param name="context">Minimal execution context for the current run.</param>
+    /// <returns>A <see cref="PolicyDecision"/> indicating allow or deny with reason.</returns>
+    PolicyDecision Evaluate(ToolCall call, ToolExecutionAnalysis analysis, AgentContext context);
 }
 
 

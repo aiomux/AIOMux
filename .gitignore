@@ -363,3 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 /aiomux.html
 /AIOMux.Core/Replay/README.md
+/AIOMux.Local/demo_console
+/AIOMux.Local/demo_gauntlet
