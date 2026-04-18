@@ -398,6 +398,7 @@ public class SolutionRunner
             {
                 "allowall" => new AllowAllPolicyEngine(),
                 "tooldenylist" => new ToolDenyListPolicyEngine(ResolveDeniedTools(config.Parameters)),
+                "operationpolicy" => LoadOperationPolicyEngine(config.Parameters, policyConfigPath),
                 _ => throw new InvalidOperationException($"Unknown policy engine type: {config.Type}")
             };
         }
@@ -414,6 +415,34 @@ public class SolutionRunner
             return [];
 
         return ToolDenyListPolicyEngine.ParseDeniedTools(denyTools);
+    }
+
+    /// <summary>
+    /// Loads an <see cref="OperationPolicyEngine"/> from a standalone policy document.
+    /// The parameters map must contain a <c>policyFile</c> entry with an absolute or
+    /// config-directory-relative path to a JSON file matching the <see cref="OperationPolicyDocument"/> schema.
+    /// Throws <see cref="InvalidOperationException"/> when the parameter is missing or the file cannot be parsed.
+    /// </summary>
+    private OperationPolicyEngine LoadOperationPolicyEngine(
+        Dictionary<string, object?> parameters,
+        string? configPath)
+    {
+        if (!parameters.TryGetValue("policyFile", out var raw) || raw is not string relPath || string.IsNullOrWhiteSpace(relPath))
+            throw new InvalidOperationException("operationpolicy engine requires a 'policyFile' parameter.");
+
+        var basePath = string.IsNullOrWhiteSpace(configPath)
+            ? Directory.GetCurrentDirectory()
+            : Path.GetDirectoryName(Path.GetFullPath(configPath)) ?? Directory.GetCurrentDirectory();
+
+        var policyFilePath = Path.IsPathRooted(relPath)
+            ? relPath
+            : Path.Combine(basePath, relPath);
+
+        _logger?.LogInformation("Loading operation policy from {Path}", policyFilePath);
+
+        // JsonException propagates on unknown enum values or malformed JSON; caller logs and re-throws.
+        var document = OperationPolicyDocument.LoadFromFile(policyFilePath);
+        return OperationPolicyEngine.FromDocument(document);
     }
 
     /// <summary>

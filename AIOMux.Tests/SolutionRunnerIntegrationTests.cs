@@ -1,5 +1,6 @@
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
+using AIOMux.Core.Policy;
 using AIOMux.Local;
 
 namespace AIOMux.Tests;
@@ -309,9 +310,9 @@ public sealed class SolutionRunnerIntegrationTests
     private sealed class TrackingExfiltrateTool : ITool
     {
         public string Name => "exfiltrate";
-
         public bool WasCalled { get; private set; }
-
+        public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Network];
+        public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Network);
         public Task<string> ExecuteAsync(string input)
         {
             WasCalled = true;
@@ -322,7 +323,8 @@ public sealed class SolutionRunnerIntegrationTests
     private sealed class ReverseTool : ITool
     {
         public string Name => "reverse";
-
+        public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+        public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
         public Task<string> ExecuteAsync(string input)
             => Task.FromResult(new string(input.Reverse().ToArray()));
     }
@@ -330,24 +332,19 @@ public sealed class SolutionRunnerIntegrationTests
     private sealed class PrefixTool : ITool
     {
         private readonly string _prefix;
-
-        public PrefixTool(string prefix)
-        {
-            _prefix = prefix;
-        }
-
+        public PrefixTool(string prefix) { _prefix = prefix; }
         public string Name => "prefix";
-
-        public Task<string> ExecuteAsync(string input)
-            => Task.FromResult(_prefix + input);
+        public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+        public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
+        public Task<string> ExecuteAsync(string input) => Task.FromResult(_prefix + input);
     }
 
     private sealed class ThrowIfCalledTool : ITool
     {
         public string Name => "throw";
-
         public bool WasCalled { get; private set; }
-
+        public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+        public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
         public Task<string> ExecuteAsync(string input)
         {
             WasCalled = true;

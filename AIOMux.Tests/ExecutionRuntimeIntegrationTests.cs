@@ -164,16 +164,17 @@ public sealed class ExecutionRuntimeIntegrationTests
     private sealed class UppercaseTool : ITool
     {
         public string Name => "upper";
-
+        public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+        public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
         public Task<string> ExecuteAsync(string input) => Task.FromResult(input.ToUpperInvariant());
     }
 
     private sealed class ThrowIfCalledTool : ITool
     {
         public string Name => "lookup";
-
         public bool WasCalled { get; private set; }
-
+        public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+        public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
         public Task<string> ExecuteAsync(string input)
         {
             WasCalled = true;
@@ -183,10 +184,7 @@ public sealed class ExecutionRuntimeIntegrationTests
 
     private sealed class DenyAllPolicyEngine(string reason, string hash) : IPolicyEngine
     {
-        public PolicyDecision EvaluateStep(
-            ExecutionStepMetadata stepMetadata,
-            IReadOnlyDictionary<string, object?> resolvedInputs,
-            ExecutionContext context)
+        public PolicyDecision Evaluate(ToolCall call, ToolExecutionAnalysis analysis, AgentContext context)
             => PolicyDecision.Deny(reason, hash);
     }
 }

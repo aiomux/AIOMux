@@ -1,6 +1,7 @@
 using AIOMux.Core;
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
+using AIOMux.Core.Policy;
 using AIOMux.Local;
 using System.Collections.Immutable;
 using System.Text.Json;
@@ -158,9 +159,9 @@ public sealed class ExtensionAssemblyIntegrationTests
 public sealed class AssemblyUppercaseTool : ITool
 {
     public string Name => "assembly-uppercase";
-
-    public Task<string> ExecuteAsync(string input)
-        => Task.FromResult(input.ToUpperInvariant());
+    public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+    public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
+    public Task<string> ExecuteAsync(string input) => Task.FromResult(input.ToUpperInvariant());
 }
 
 public sealed class AssemblyPrefixAgent : IAgent
