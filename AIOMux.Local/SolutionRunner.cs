@@ -382,34 +382,41 @@ public class SolutionRunner
     private IPolicyEngine LoadPolicyEngine(string? policyConfigPath)
     {
         if (string.IsNullOrWhiteSpace(policyConfigPath))
-        {
-            _logger?.LogInformation("No policy configuration specified, using AllowAllPolicyEngine");
-            return new AllowAllPolicyEngine();
-        }
+            throw new InvalidOperationException("Policy configuration is required. Set 'policyConfig' in solution.json.");
 
+        _logger?.LogInformation("Loading policy configuration from {Path}", policyConfigPath);
+        var json = File.ReadAllText(policyConfigPath);
+
+        // Support direct operation policy documents:
+        // {
+        //   "version": "1",
+        //   "tools": { ... }
+        // }
         try
         {
-            _logger?.LogInformation("Loading policy engine from {Path}", policyConfigPath);
-            var json = File.ReadAllText(policyConfigPath);
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var config = JsonSerializer.Deserialize<PolicyEngineConfig>(json, options);
-
-            if (config == null || string.IsNullOrWhiteSpace(config.Type))
-                return new AllowAllPolicyEngine();
-
-            return config.Type.ToLowerInvariant() switch
-            {
-                "allowall" => new AllowAllPolicyEngine(),
-                "tooldenylist" => new ToolDenyListPolicyEngine(ResolveDeniedTools(config.Parameters)),
-                "operationpolicy" => LoadOperationPolicyEngine(config.Parameters, policyConfigPath),
-                _ => throw new InvalidOperationException($"Unknown policy engine type: {config.Type}")
-            };
+            var operationDocument = OperationPolicyDocument.Deserialize(json);
+            _logger?.LogInformation("Loaded operation policy document from {Path}", policyConfigPath);
+            return OperationPolicyEngine.FromDocument(operationDocument);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger?.LogWarning(ex, "Failed to load policy engine, defaulting to AllowAllPolicyEngine");
-            return new AllowAllPolicyEngine();
+            // Not a direct operation policy document. Continue with engine-config format.
         }
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        var config = JsonSerializer.Deserialize<PolicyEngineConfig>(json, options)
+            ?? throw new InvalidOperationException("Policy configuration file is empty or invalid.");
+
+        if (string.IsNullOrWhiteSpace(config.Type))
+            throw new InvalidOperationException("Policy configuration must include a non-empty 'type', or use an operation policy document with 'version' and 'tools'.");
+
+        return config.Type.ToLowerInvariant() switch
+        {
+            "allowall" => new AllowAllPolicyEngine(),
+            "tooldenylist" => new ToolDenyListPolicyEngine(ResolveDeniedTools(config.Parameters)),
+            "operationpolicy" => LoadOperationPolicyEngine(config.Parameters, policyConfigPath),
+            _ => throw new InvalidOperationException($"Unknown policy engine type: {config.Type}")
+        };
     }
 
     private static IEnumerable<string> ResolveDeniedTools(Dictionary<string, object?> parameters)
