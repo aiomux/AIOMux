@@ -125,6 +125,8 @@ public class ExecutionRuntime : IExecutionRuntime
                         OutputKey = outputKey,
                         StateChanges = stateChanges,
                         Success = true,
+                        PolicyDenyReason = stepResult.PolicyDenyReason,
+                        PolicyHash = stepResult.PolicyHash,
                         Timestamp = stepStart,
                         DurationMs = stepSw.Elapsed.TotalMilliseconds
                     });
@@ -271,7 +273,12 @@ public class ExecutionRuntime : IExecutionRuntime
         if (!dispatch.ToolResult.Success)
             throw new InvalidOperationException(dispatch.ToolResult.Error ?? $"Tool '{step.Target}' failed");
 
-        return new StepExecutionResult { Success = true, Output = dispatch.ToolResult.JsonResult };
+        return new StepExecutionResult
+        {
+            Success = true,
+            Output = dispatch.ToolResult.JsonResult,
+            PolicyHash = dispatch.PolicyHash
+        };
     }
 
     private static string AppendSummary(string output, ExecutionContext ctx, string planName, bool includeDetailedMetrics)

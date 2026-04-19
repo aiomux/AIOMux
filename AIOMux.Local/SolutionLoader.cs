@@ -63,6 +63,9 @@ public class SolutionLoader
 
         if (string.IsNullOrWhiteSpace(definition.Entry))
             throw new InvalidOperationException("Solution must have an entry point");
+
+        if (string.IsNullOrWhiteSpace(definition.PolicyConfig))
+            throw new InvalidOperationException("Solution must specify a policyConfig path");
     }
 
     /// <summary>
@@ -111,7 +114,7 @@ public class SolutionLoader
         if (!File.Exists(definition.Entry))
             throw new FileNotFoundException($"Entry point file not found: {definition.Entry}");
 
-        if (!string.IsNullOrWhiteSpace(definition.PolicyConfig) && !File.Exists(definition.PolicyConfig))
+        if (!File.Exists(definition.PolicyConfig!))
             throw new FileNotFoundException($"Policy config file not found: {definition.PolicyConfig}");
 
         if (!string.IsNullOrWhiteSpace(definition.MemoryConfig) && !File.Exists(definition.MemoryConfig))

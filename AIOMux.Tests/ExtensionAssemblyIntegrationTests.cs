@@ -39,10 +39,16 @@ public sealed class ExtensionAssemblyIntegrationTests
             });
 
             var solutionPath = Path.Combine(solutionDirectory, "solution.json");
+            await WriteJsonAsync(Path.Combine(solutionDirectory, "policy.json"), new
+            {
+                type = "allowall",
+                parameters = new { }
+            });
             await WriteJsonAsync(solutionPath, new
             {
                 name = "assembly-tool-solution",
                 entry = "plan.json",
+                policyConfig = "policy.json",
                 assemblies = new[] { assemblyPath },
                 executionOptions = new
                 {
@@ -97,10 +103,16 @@ public sealed class ExtensionAssemblyIntegrationTests
             });
 
             var solutionPath = Path.Combine(solutionDirectory, "solution.json");
+            await WriteJsonAsync(Path.Combine(solutionDirectory, "policy.json"), new
+            {
+                type = "allowall",
+                parameters = new { }
+            });
             await WriteJsonAsync(solutionPath, new
             {
                 name = "assembly-agent-solution",
                 entry = "plan.json",
+                policyConfig = "policy.json",
                 assemblies = new[] { assemblyPath },
                 executionOptions = new
                 {
@@ -156,12 +168,12 @@ public sealed class ExtensionAssemblyIntegrationTests
     }
 }
 
-public sealed class AssemblyUppercaseTool : ITool
+public sealed class AssemblyUppercaseTool : DispatchableToolBase
 {
-    public string Name => "assembly-uppercase";
-    public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
-    public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
-    public Task<string> ExecuteAsync(string input) => Task.FromResult(input.ToUpperInvariant());
+    public override string Name => "assembly-uppercase";
+    public override IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+    public override ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
+    protected override Task<string> InvokeCoreAsync(string input) => Task.FromResult(input.ToUpperInvariant());
 }
 
 public sealed class AssemblyPrefixAgent : IAgent

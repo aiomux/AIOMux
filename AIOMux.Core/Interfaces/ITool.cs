@@ -5,6 +5,7 @@ namespace AIOMux.Core.Interfaces;
 
 /// <summary>
 /// Contract for tools that can be used by agents to perform specific tasks.
+/// Execution is intentionally not exposed here and is only available through the dispatcher path.
 /// </summary>
 public interface ITool
 {
@@ -24,16 +25,9 @@ public interface ITool
     /// would perform. Must be deterministic and side-effect-free.
     /// When the input cannot be classified, return <see cref="ToolExecutionAnalysis.Unrecognized"/>.
     /// </summary>
-    /// <param name="input">The raw input string that would be passed to <see cref="ExecuteAsync"/>.</param>
+    /// <param name="input">The raw input string intended for tool execution.</param>
     /// <returns>
     /// A <see cref="ToolExecutionAnalysis"/> describing the requested operations.
     /// </returns>
     ToolExecutionAnalysis Analyze(string input);
-
-    /// <summary>
-    /// Execute the tool with the given input and return a result string.
-    /// </summary>
-    /// <param name="input">The input string for the tool</param>
-    /// <returns>The result of tool execution</returns>
-    Task<string> ExecuteAsync(string input);
 }

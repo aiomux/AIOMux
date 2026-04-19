@@ -1,24 +1,31 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <Title>AIOMux Local</Title>
-    <Version>0.1.0</Version>
-    <Authors>Adrian Cantu</Authors>
-    <Company>AIOMux</Company>
-    <Product>AIOMux Local</Product>
-    <Description>Local solution runner and orchestration for AIOMux.</Description>
-    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
-    <StartupObject>AIOMux.Local.Program</StartupObject>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<Title>AIOMux Local</Title>
+		<Version>0.1.0</Version>
+		<Authors>Adrian Cantu</Authors>
+		<Company>AIOMux</Company>
+		<Product>AIOMux Local</Product>
+		<Description>Local solution runner and orchestration for AIOMux.</Description>
+		<GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+		<StartupObject>AIOMux.Local.Program</StartupObject>
+		<GauntletDemoDirectory>C:\Users\adria\source\repos\AIOMux.Gauntlet\demo\gauntlet\</GauntletDemoDirectory>
+		<LocalRunnerExePath>$([System.IO.Path]::ChangeExtension('$(TargetPath)', '.exe'))</LocalRunnerExePath>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\AIOMux.Clients\AIOMux.Clients.csproj" />
-    <ProjectReference Include="..\AIOMux.Connectors\AIOMux.Connectors.csproj" />
-    <ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\AIOMux.Clients\AIOMux.Clients.csproj" />
+		<ProjectReference Include="..\AIOMux.Connectors\AIOMux.Connectors.csproj" />
+		<ProjectReference Include="..\AIOMux.Core\AIOMux.Core.csproj" />
+	</ItemGroup>
+
+	<Target Name="MoveLocalRunnerExeToGauntletDemo" AfterTargets="Build" Condition="Exists('$(LocalRunnerExePath)')">
+		<MakeDir Directories="$(GauntletDemoDirectory)" />
+		<Move SourceFiles="$(LocalRunnerExePath)" DestinationFolder="$(GauntletDemoDirectory)" />
+	</Target>
 
 </Project>

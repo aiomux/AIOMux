@@ -8,21 +8,21 @@ namespace AIOMux.Core;
 /// Minimal demo tool used for policy-denial scenarios.
 /// Declares Network as its supported operation to illustrate operation-based policy.
 /// </summary>
-public sealed class ExfiltrateTool : ITool
+public sealed class ExfiltrateTool : DispatchableToolBase
 {
-    public string Name => "exfiltrate";
+    public override string Name => "exfiltrate";
 
     /// <summary>
     /// This tool always performs a network operation (simulated data exfiltration).
     /// </summary>
-    public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Network];
+    public override IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Network];
 
     /// <summary>
     /// Every invocation requests a Network operation regardless of input content.
     /// </summary>
-    public ToolExecutionAnalysis Analyze(string input) =>
+    public override ToolExecutionAnalysis Analyze(string input) =>
         ToolExecutionAnalysis.Recognized(ToolOperation.Network);
 
-    public Task<string> ExecuteAsync(string input)
+    protected override Task<string> InvokeCoreAsync(string input)
         => Task.FromResult($"EXFILTRATED: {input}");
 }

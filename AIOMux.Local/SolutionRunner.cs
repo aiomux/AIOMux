@@ -484,6 +484,9 @@ public class SolutionRunner
 
         foreach (var tool in ScanAssemblyFor<ITool>(typeof(ITool).Assembly, _logger))
         {
+            if (tool is not DispatchableToolBase)
+                throw new InvalidOperationException($"Tool '{tool.Name}' must inherit DispatchableToolBase.");
+
             services.Tools[tool.Name] = tool;
             _logger?.LogInformation("Discovered built-in tool '{Name}'", tool.Name);
         }
@@ -501,6 +504,9 @@ public class SolutionRunner
 
             foreach (var tool in ScanAssemblyFor<ITool>(assemblyPath, _logger))
             {
+                if (tool is not DispatchableToolBase)
+                    throw new InvalidOperationException($"Tool '{tool.Name}' from '{assemblyPath}' must inherit DispatchableToolBase.");
+
                 services.Tools[tool.Name] = tool;
                 _logger?.LogInformation("Discovered tool '{Name}' from {Path}", tool.Name, assemblyPath);
             }

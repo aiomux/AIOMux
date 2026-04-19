@@ -61,7 +61,6 @@ public sealed class ToolDispatcher
     {
         var events = new List<ToolDispatchEvent>();
 
-        // 1. Proposed
         ToolResult? cachedResult = null;
         bool isReplayed = (_replayMode == ReplayMode.Full || _replayMode == ReplayMode.ToolsOnly)
             && _replayCache.TryGetValue(replayKey, out cachedResult);
@@ -74,7 +73,57 @@ public sealed class ToolDispatcher
             IsReplayed = isReplayed
         });
 
-        // 2. Replay path: skip analysis and policy, return cached result directly.
+        // Resolve and analyze before every policy evaluation.
+        _tools.TryGetValue(toolName, out var tool);
+
+        var analysis = tool != null
+            ? tool.Analyze(input)
+            : ToolExecutionAnalysis.Unrecognized($"Tool not found: {toolName}");
+
+        var toolCall = new ToolCall { ToolName = toolName, Input = input };
+        var decision = _policy.Evaluate(toolCall, analysis, agentContext);
+
+        events.Add(new PolicyEvaluatedEvent
+        {
+            CallId = callId,
+            ToolName = toolName,
+            RequestedOperations = analysis.RequestedOperations,
+            IsRecognized = analysis.IsRecognized,
+            Allowed = decision.Allowed,
+            Reason = decision.DenyReason,
+            PolicyHash = decision.PolicyHash
+        });
+
+        if (!decision.Allowed)
+        {
+            _logger?.LogWarning(
+                "Tool '{ToolName}' denied [{PolicyHash}]: {Reason}",
+                toolName, decision.PolicyHash, decision.DenyReason);
+
+            return new ToolDispatchResult
+            {
+                ToolResult = new ToolResult { CallId = callId, Success = false, Error = decision.DenyReason },
+                PolicyDenied = true,
+                PolicyDenyReason = decision.DenyReason,
+                PolicyHash = decision.PolicyHash,
+                Events = events
+            };
+        }
+
+        if (tool is not DispatchableToolBase dispatchableTool)
+        {
+            var reason = $"Tool '{toolName}' must inherit DispatchableToolBase to execute through ToolDispatcher.";
+            return new ToolDispatchResult
+            {
+                ToolResult = new ToolResult { CallId = callId, Success = false, Error = reason },
+                PolicyDenied = true,
+                PolicyDenyReason = reason,
+                PolicyHash = decision.PolicyHash,
+                Events = events
+            };
+        }
+
+        // Replay path after policy approval: skip execution but keep policy evaluation mandatory.
         if (isReplayed)
         {
             var replayToolResult = new ToolResult
@@ -95,51 +144,14 @@ public sealed class ToolDispatcher
                 IsReplayed = true
             });
 
-            return new ToolDispatchResult { ToolResult = replayToolResult, Events = events };
-        }
-
-        // 3. Resolve tool. Missing tools produce a synthetic unrecognized analysis so the
-        //    policy engine can emit a coherent denial rather than a bare exception.
-        _tools.TryGetValue(toolName, out var tool);
-
-        // 4. Analyze
-        var analysis = tool != null
-            ? tool.Analyze(input)
-            : ToolExecutionAnalysis.Unrecognized($"Tool not found: {toolName}");
-
-        // 5. Policy evaluation
-        var toolCall = new ToolCall { ToolName = toolName, Input = input };
-        var decision = _policy.Evaluate(toolCall, analysis, agentContext);
-
-        events.Add(new PolicyEvaluatedEvent
-        {
-            CallId = callId,
-            ToolName = toolName,
-            RequestedOperations = analysis.RequestedOperations,
-            IsRecognized = analysis.IsRecognized,
-            Allowed = decision.Allowed,
-            Reason = decision.DenyReason,
-            PolicyHash = decision.PolicyHash
-        });
-
-        // 6. Denied path
-        if (!decision.Allowed)
-        {
-            _logger?.LogWarning(
-                "Tool '{ToolName}' denied [{PolicyHash}]: {Reason}",
-                toolName, decision.PolicyHash, decision.DenyReason);
-
             return new ToolDispatchResult
             {
-                ToolResult = new ToolResult { CallId = callId, Success = false, Error = decision.DenyReason },
-                PolicyDenied = true,
-                PolicyDenyReason = decision.DenyReason,
+                ToolResult = replayToolResult,
                 PolicyHash = decision.PolicyHash,
                 Events = events
             };
         }
 
-        // 7. Execute
         ct.ThrowIfCancellationRequested();
 
         var sw = Stopwatch.StartNew();
@@ -147,7 +159,7 @@ public sealed class ToolDispatcher
 
         try
         {
-            var output = await tool!.ExecuteAsync(input);
+            var output = await dispatchableTool.InvokeAsync(input);
             sw.Stop();
 
             toolResult = new ToolResult { CallId = callId, Success = true, JsonResult = output };
@@ -166,7 +178,6 @@ public sealed class ToolDispatcher
             toolResult = new ToolResult { CallId = callId, Success = false, Error = ex.Message, JsonResult = string.Empty };
         }
 
-        // 8. Result
         events.Add(new ToolResultEvent
         {
             CallId = callId,
@@ -176,6 +187,11 @@ public sealed class ToolDispatcher
             Error = toolResult.Error
         });
 
-        return new ToolDispatchResult { ToolResult = toolResult, Events = events };
+        return new ToolDispatchResult
+        {
+            ToolResult = toolResult,
+            PolicyHash = decision.PolicyHash,
+            Events = events
+        };
     }
 }
