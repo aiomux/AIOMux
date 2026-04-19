@@ -349,6 +349,9 @@ public class SolutionRunner
                     loaded.WorkingDirectory,
                     (evt, result) =>
                     {
+                        var inputText = evt.Payload?.ToString()?.Trim() ?? string.Empty;
+                        Console.WriteLine($"[Connector:console-input] Received input: {inputText}");
+
                         if (result.Success)
                         {
                             var text = !string.IsNullOrWhiteSpace(result.Output)

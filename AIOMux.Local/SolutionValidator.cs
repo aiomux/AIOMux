@@ -1,6 +1,8 @@
 using AIOMux.Connectors;
 using AIOMux.Core;
 using AIOMux.Core.Builders;
+using AIOMux.Core.Interfaces;
+using System.Reflection;
 
 namespace AIOMux.Local;
 
@@ -99,8 +101,13 @@ public sealed class SolutionValidator
         if (!string.IsNullOrWhiteSpace(solution.EntryAgent))
             agentNames.Add(solution.EntryAgent);
 
+        var extensionAgentNames = DiscoverExtensionAgentNames(solution.Assemblies);
+
         foreach (var agentName in agentNames.Distinct(StringComparer.OrdinalIgnoreCase))
         {
+            if (extensionAgentNames.Contains(agentName))
+                continue;
+
             try
             {
                 _ = BuiltInAgentRegistry.ResolveType(agentName);
@@ -108,8 +115,41 @@ public sealed class SolutionValidator
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    $"Agent '{agentName}' is referenced by the plan but is not available as a built-in agent: {ex.Message}", ex);
+                    $"Agent '{agentName}' is referenced by the plan but is not available as a built-in or extension agent: {ex.Message}", ex);
             }
         }
+    }
+
+    private static HashSet<string> DiscoverExtensionAgentNames(IEnumerable<string> assemblyPaths)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var assemblyPath in assemblyPaths)
+        {
+            Assembly assembly;
+            try
+            {
+                assembly = Assembly.LoadFrom(assemblyPath);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var type in assembly.GetTypes().Where(t => t.IsClass && !t.IsAbstract && typeof(IAgent).IsAssignableFrom(t)))
+            {
+                try
+                {
+                    if (Activator.CreateInstance(type) is IAgent agent && !string.IsNullOrWhiteSpace(agent.Name))
+                        names.Add(agent.Name);
+                }
+                catch
+                {
+                    // Ignore non-instantiable agent types during validation discovery.
+                }
+            }
+        }
+
+        return names;
     }
 }
