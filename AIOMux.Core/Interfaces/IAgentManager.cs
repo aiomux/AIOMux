@@ -30,29 +30,29 @@ public interface IAgentManager
     IEnumerable<(string Name, string Description)> GetAvailableAgents();
 
     /// <summary>
-    /// Loads an agent plugin from the specified assembly path.
-    /// Each plugin's preferred LLM profile is resolved from <paramref name="llmProfiles"/>
+    /// Loads agents from the specified assembly path.
+    /// Each agent's preferred LLM profile is resolved from <paramref name="llmProfiles"/>
     /// using <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to the "default" key.
     /// </summary>
-    /// <param name="assemblyPath">Path to the plugin assembly.</param>
-    /// <param name="llmProfiles">Named LLM client profiles available to plugins.</param>
-    /// <param name="configuration">Optional configuration for the plugin.</param>
-    /// <returns>True if the plugin was loaded successfully.</returns>
-    Task<bool> LoadPluginAsync(string assemblyPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null);
+    /// <param name="assemblyPath">Path to the assembly.</param>
+    /// <param name="llmProfiles">Named LLM client profiles available to agents.</param>
+    /// <param name="configuration">Optional configuration for loaded agents.</param>
+    /// <returns>True if at least one agent was loaded successfully.</returns>
+    Task<bool> LoadAgentsFromAssemblyAsync(string assemblyPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null);
 
     /// <summary>
-    /// Loads all plugins from the specified directory.
-    /// Each plugin's preferred LLM profile is resolved from <paramref name="llmProfiles"/>
+    /// Loads agents from all matching assemblies in the specified directory.
+    /// Each agent's preferred LLM profile is resolved from <paramref name="llmProfiles"/>
     /// using <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to the "default" key.
     /// </summary>
-    /// <param name="pluginDirectory">Directory containing plugin assemblies.</param>
-    /// <param name="llmProfiles">Named LLM client profiles available to plugins.</param>
-    /// <param name="configuration">Optional configuration for plugins.</param>
-    /// <returns>Number of plugins successfully loaded.</returns>
-    Task<int> LoadPluginsFromDirectoryAsync(string pluginDirectory, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null);
+    /// <param name="directoryPath">Directory containing agent assemblies.</param>
+    /// <param name="llmProfiles">Named LLM client profiles available to agents.</param>
+    /// <param name="configuration">Optional configuration for loaded agents.</param>
+    /// <returns>Number of assemblies that loaded at least one agent.</returns>
+    Task<int> LoadAgentsFromDirectoryAsync(string directoryPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null);
 
     /// <summary>
-    /// Unloads all plugins and cleans up resources.
+    /// Unloads all externally loaded agents and cleans up resources.
     /// </summary>
-    Task UnloadAllPluginsAsync();
+    Task UnloadExternalAgentsAsync();
 }

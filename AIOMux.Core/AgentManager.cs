@@ -81,7 +81,7 @@ public class AgentManager : IAgentManager
     /// resolved via <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to "default".</param>
     /// <param name="configuration">Optional configuration for the loaded agent(s).</param>
     /// <returns>True if at least one agent was loaded successfully.</returns>
-    public async Task<bool> LoadPluginAsync(string assemblyPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
+    public async Task<bool> LoadAgentsFromAssemblyAsync(string assemblyPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
     {
         try
         {
@@ -158,29 +158,29 @@ public class AgentManager : IAgentManager
     /// <summary>
     /// Loads extensions from a directory asynchronously.
     /// </summary>
-    /// <param name="pluginDirectory">Directory containing extension assemblies.</param>
+    /// <param name="directoryPath">Directory containing extension assemblies.</param>
     /// <param name="llmProfiles">Named LLM client profiles passed through to each loaded agent.</param>
     /// <param name="configuration">Optional configuration for loaded agents.</param>
     /// <returns>Number of assemblies with at least one successfully loaded agent.</returns>
-    public async Task<int> LoadPluginsFromDirectoryAsync(string pluginDirectory, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
+    public async Task<int> LoadAgentsFromDirectoryAsync(string directoryPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
     {
-        if (!Directory.Exists(pluginDirectory))
+        if (!Directory.Exists(directoryPath))
         {
-            _logger?.LogWarning("Extension directory does not exist: {PluginDirectory}", pluginDirectory);
+            _logger?.LogWarning("Extension directory does not exist: {DirectoryPath}", directoryPath);
             return 0;
         }
 
-        var pluginFiles = Directory.GetFiles(pluginDirectory, "AIOMux.Plugin.*.dll", SearchOption.TopDirectoryOnly);
+        var assemblyFiles = Directory.GetFiles(directoryPath, "*.dll", SearchOption.TopDirectoryOnly);
         var loadedCount = 0;
 
-        foreach (var pluginFile in pluginFiles)
+        foreach (var assemblyFile in assemblyFiles)
         {
-            if (await LoadPluginAsync(pluginFile, llmProfiles, configuration))
+            if (await LoadAgentsFromAssemblyAsync(assemblyFile, llmProfiles, configuration))
                 loadedCount++;
         }
 
-        _logger?.LogInformation("Loaded {LoadedCount} extension assembly(ies) from directory: {PluginDirectory}",
-            loadedCount, pluginDirectory);
+        _logger?.LogInformation("Loaded {LoadedCount} extension assembly(ies) from directory: {DirectoryPath}",
+            loadedCount, directoryPath);
 
         return loadedCount;
     }
@@ -188,7 +188,7 @@ public class AgentManager : IAgentManager
     /// <summary>
     /// Unloads all extension agents and cleans up resources.
     /// </summary>
-    public async Task UnloadAllPluginsAsync()
+    public async Task UnloadExternalAgentsAsync()
     {
         foreach (var agent in _loadedExtensionAgents)
         {
