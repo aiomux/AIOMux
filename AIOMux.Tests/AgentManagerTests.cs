@@ -35,11 +35,11 @@ public sealed class AgentManagerTests
     }
 
     [Fact]
-    public async Task LoadPluginAsync_WhenAssemblyMissing_ReturnsFalse()
+    public async Task LoadAgentsFromAssemblyAsync_WhenAssemblyMissing_ReturnsFalse()
     {
         var manager = new AgentManager();
 
-        var loaded = await manager.LoadPluginAsync(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".dll"));
+        var loaded = await manager.LoadAgentsFromAssemblyAsync(Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".dll"));
 
         Assert.False(loaded);
     }

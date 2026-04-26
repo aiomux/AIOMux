@@ -6,12 +6,12 @@ using System.Text;
 namespace AIOMux.Core;
 
 /// <summary>
-/// Manages agent registration, plugin loading, and retrieval.
+/// Manages agent registration, extension loading, and retrieval.
 /// </summary>
 public class AgentManager : IAgentManager
 {
     private readonly List<IAgent> _agents = [];
-    private readonly List<IAgentPlugin> _loadedPlugins = [];
+    private readonly List<IAgent> _loadedExtensionAgents = [];
     private readonly ILogger<AgentManager>? _logger;
     public ILoggerFactory? LoggerFactory { get; }
 
@@ -74,98 +74,99 @@ public class AgentManager : IAgentManager
     }
 
     /// <summary>
-    /// Loads a single plugin asynchronously.
+    /// Loads a single extension assembly asynchronously.
     /// </summary>
-    /// <param name="assemblyPath">Path to the plugin assembly.</param>
-    /// <param name="llmProfiles">Named LLM client profiles. Each plugin's preferred profile is
+    /// <param name="assemblyPath">Path to the assembly.</param>
+    /// <param name="llmProfiles">Named LLM client profiles. Each agent's preferred profile is
     /// resolved via <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to "default".</param>
-    /// <param name="configuration">Optional configuration for the plugin.</param>
-    /// <returns>True if the plugin was loaded successfully.</returns>
+    /// <param name="configuration">Optional configuration for the loaded agent(s).</param>
+    /// <returns>True if at least one agent was loaded successfully.</returns>
     public async Task<bool> LoadPluginAsync(string assemblyPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
     {
         try
         {
-            _logger?.LogInformation("Attempting to load plugin from: {AssemblyPath}", assemblyPath);
+            _logger?.LogInformation("Attempting to load extension assembly from: {AssemblyPath}", assemblyPath);
 
             if (!File.Exists(assemblyPath))
             {
-                _logger?.LogError("Plugin assembly not found: {AssemblyPath}", assemblyPath);
+                _logger?.LogError("Extension assembly not found: {AssemblyPath}", assemblyPath);
                 return false;
             }
 
             var assembly = Assembly.LoadFrom(assemblyPath);
-            var pluginTypes = assembly.GetTypes()
-                .Where(t => t.IsClass && !t.IsAbstract && typeof(IAgentPlugin).IsAssignableFrom(t))
+            var agentTypes = assembly.GetTypes()
+                .Where(t => t.IsClass && !t.IsAbstract && typeof(IAgent).IsAssignableFrom(t))
                 .ToArray();
 
-            if (pluginTypes.Length == 0)
+            if (agentTypes.Length == 0)
                 return false;
 
-            foreach (var pluginType in pluginTypes)
+            var loadedAny = false;
+
+            foreach (var agentType in agentTypes)
             {
                 try
                 {
-                    var plugin = Activator.CreateInstance(pluginType) as IAgentPlugin;
-                    if (plugin == null)
+                    if (Activator.CreateInstance(agentType) is not IAgent prototype)
                     {
-                        _logger?.LogError("Failed to create instance of plugin type: {PluginType}", pluginType.Name);
+                        _logger?.LogError("Failed to create instance of agent type: {AgentType}", agentType.Name);
                         continue;
                     }
 
-                    var initialized = await plugin.InitializeAsync(configuration);
-                    if (!initialized)
-                    {
-                        _logger?.LogError("Plugin initialization failed: {PluginType}", pluginType.Name);
-                        continue;
-                    }
+                    var llmClient = ResolveProfileClient(llmProfiles, prototype.Metadata.PreferredLlmProfile);
 
-                    var llmClient = ResolveProfileClient(llmProfiles, plugin.Metadata.PreferredLlmProfile);
-
-                    var agent = plugin.CreateAgent(llmClient, configuration);
-
-                    if (!ValidateLlmConstraints(plugin.Metadata, llmClient))
+                    if (!ValidateLlmConstraints(prototype.Metadata, llmClient))
                     {
                         _logger?.LogError(
-                            "Plugin '{AgentName}' requires provider='{Provider}' model='{Model}' but the supplied LLM client does not satisfy these constraints. Load aborted.",
-                            plugin.Metadata.Name,
-                            plugin.Metadata.RequiredLlmProvider ?? "(any)",
-                            plugin.Metadata.RequiredLlmModel ?? "(any)");
+                            "Agent '{AgentName}' requires provider='{Provider}' model='{Model}' but the supplied LLM client does not satisfy these constraints. Load aborted.",
+                            prototype.Metadata.Name,
+                            prototype.Metadata.RequiredLlmProvider ?? "(any)",
+                            prototype.Metadata.RequiredLlmModel ?? "(any)");
+                        continue;
+                    }
+
+                    var agent = prototype.CreateAgent(llmClient, configuration);
+                    var initialized = await agent.InitializeAsync(configuration);
+                    if (!initialized)
+                    {
+                        _logger?.LogError("Agent initialization failed: {AgentType}", agentType.Name);
                         continue;
                     }
 
                     Register(agent);
-                    _loadedPlugins.Add(plugin);
+                    _loadedExtensionAgents.Add(agent);
+                    loadedAny = true;
 
-                    _logger?.LogInformation("Successfully loaded plugin: {AgentName} from {PluginType}",
-                        agent.Name, pluginType.Name);
+                    _logger?.LogInformation("Successfully loaded agent: {AgentName} from {AgentType}",
+                        agent.Name, agentType.Name);
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex, "Error loading plugin type: {PluginType}", pluginType.Name);
+                    _logger?.LogError(ex, "Error loading agent type: {AgentType}", agentType.Name);
                 }
             }
 
-            return true;
+            return loadedAny;
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error loading plugin assembly: {AssemblyPath}", assemblyPath);
+            _logger?.LogError(ex, "Error loading extension assembly: {AssemblyPath}", assemblyPath);
             return false;
         }
     }
 
     /// <summary>
-    /// Loads plugins from a directory asynchronously.
+    /// Loads extensions from a directory asynchronously.
     /// </summary>
-    /// <param name="pluginDirectory">Directory containing plugin assemblies.</param>
-    /// <param name="llmProfiles">Named LLM client profiles passed through to each plugin.</param>
-    /// <param name="configuration">Optional configuration for plugins.</param>
-    /// <returns>Number of plugins successfully loaded.</returns>
+    /// <param name="pluginDirectory">Directory containing extension assemblies.</param>
+    /// <param name="llmProfiles">Named LLM client profiles passed through to each loaded agent.</param>
+    /// <param name="configuration">Optional configuration for loaded agents.</param>
+    /// <returns>Number of assemblies with at least one successfully loaded agent.</returns>
     public async Task<int> LoadPluginsFromDirectoryAsync(string pluginDirectory, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
     {
         if (!Directory.Exists(pluginDirectory))
         {
-            _logger?.LogWarning("Plugin directory does not exist: {PluginDirectory}", pluginDirectory);
+            _logger?.LogWarning("Extension directory does not exist: {PluginDirectory}", pluginDirectory);
             return 0;
         }
 
@@ -178,45 +179,41 @@ public class AgentManager : IAgentManager
                 loadedCount++;
         }
 
-        _logger?.LogInformation("Loaded {LoadedCount} plugins from directory: {PluginDirectory}",
+        _logger?.LogInformation("Loaded {LoadedCount} extension assembly(ies) from directory: {PluginDirectory}",
             loadedCount, pluginDirectory);
 
         return loadedCount;
     }
 
     /// <summary>
-    /// Unloads all plugins and cleans up resources.
+    /// Unloads all extension agents and cleans up resources.
     /// </summary>
     public async Task UnloadAllPluginsAsync()
     {
-        foreach (var plugin in _loadedPlugins)
+        foreach (var agent in _loadedExtensionAgents)
         {
             try
             {
-                await plugin.DisposeAsync();
+                await agent.DisposeAsync();
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Error disposing plugin: {PluginType}", plugin.GetType().Name);
+                _logger?.LogError(ex, "Error disposing agent: {AgentType}", agent.GetType().Name);
             }
         }
 
-        // Remove plugin-based agents from the registry
-        var pluginAgents = _agents.Where(a => _loadedPlugins.Any(p => p.Metadata.Name == a.Name)).ToList();
-        foreach (var agent in pluginAgents)
-        {
+        foreach (var agent in _loadedExtensionAgents)
             _agents.Remove(agent);
-        }
 
-        _loadedPlugins.Clear();
-        _logger?.LogInformation("All plugins have been unloaded");
+        _loadedExtensionAgents.Clear();
+        _logger?.LogInformation("All extension agents have been unloaded");
     }
 
     /// <summary>
     /// Validates that the provided LLM client satisfies the compatibility constraints
-    /// declared in an agent plugin's metadata.
+    /// declared in an agent metadata object.
     /// </summary>
-    /// <param name="metadata">The plugin metadata containing optional constraint fields.</param>
+    /// <param name="metadata">The agent metadata containing optional constraint fields.</param>
     /// <param name="llmClient">The LLM client that will be injected into the agent.</param>
     /// <returns>
     /// True when no constraints are declared or all constraints are satisfied;
@@ -230,7 +227,6 @@ public class AgentManager : IAgentManager
         if (!hasProviderConstraint && !hasModelConstraint)
             return true;
 
-        // Constraints are declared but no client was provided.
         if (llmClient == null)
             return false;
 

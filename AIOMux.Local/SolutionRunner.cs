@@ -457,8 +457,8 @@ public class SolutionRunner
 
     /// <summary>
     /// Registers built-in and assembly-provided agents and tools, then resolves declared connectors.
-    /// Plugin assemblies are loaded through <see cref="IAgentManager.LoadPluginAsync(string, Dictionary{string, ILLMClient}?, Dictionary{string, object}?)"/>
-    /// so each plugin can resolve its preferred LLM profile.
+    /// Agent assemblies are loaded through <see cref="IAgentManager.LoadAgentsFromAssemblyAsync(string, Dictionary{string, ILLMClient}?, Dictionary{string, object}?)"/>
+    /// so each agent can resolve its preferred LLM profile.
     /// </summary>
     private async Task<List<ResolvedConnector>> ScanAndRegisterAsync(
         SolutionDefinition solution,
@@ -494,13 +494,7 @@ public class SolutionRunner
         foreach (var assemblyPath in solution.Assemblies)
         {
             if (services.AgentManager != null)
-                await services.AgentManager.LoadPluginAsync(assemblyPath, llmProfiles);
-
-            foreach (var agent in ScanAssemblyFor<IAgent>(assemblyPath, _logger))
-            {
-                services.AgentManager?.Register(agent);
-                _logger?.LogInformation("Discovered agent '{Name}' from {Path}", agent.Name, assemblyPath);
-            }
+                await services.AgentManager.LoadAgentsFromAssemblyAsync(assemblyPath, llmProfiles);
 
             foreach (var tool in ScanAssemblyFor<ITool>(assemblyPath, _logger))
             {

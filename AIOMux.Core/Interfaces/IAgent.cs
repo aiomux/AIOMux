@@ -1,3 +1,4 @@
+using AIOMux.Core;
 using AIOMux.Core.Models;
 using System.Collections.Immutable;
 
@@ -29,6 +30,37 @@ public interface IAgent
     /// Defaults to true.
     /// </summary>
     bool SupportsPipelining => true;
+
+    /// <summary>
+    /// Structured metadata describing this agent.
+    /// Defaults to a metadata object populated from <see cref="Name"/> and <see cref="Description"/>.
+    /// </summary>
+    AgentMetadata Metadata => new()
+    {
+        Name = Name,
+        Description = Description
+    };
+
+    /// <summary>
+    /// Creates and returns an executable agent instance.
+    /// Defaults to returning the current instance.
+    /// </summary>
+    /// <param name="llmClient">Optional LLM client resolved by profile.</param>
+    /// <param name="configuration">Optional configuration parameters for the agent.</param>
+    IAgent CreateAgent(ILLMClient? llmClient = null, Dictionary<string, object>? configuration = null) => this;
+
+    /// <summary>
+    /// Initializes the agent with any required setup.
+    /// Defaults to a successful no-op.
+    /// </summary>
+    /// <param name="configuration">Optional configuration parameters.</param>
+    Task<bool> InitializeAsync(Dictionary<string, object>? configuration = null) => Task.FromResult(true);
+
+    /// <summary>
+    /// Cleans up any resources used by the agent.
+    /// Defaults to a completed no-op.
+    /// </summary>
+    Task DisposeAsync() => Task.CompletedTask;
 
     /// <summary>
     /// Executes the agent for a step using explicit resolved inputs and returns a step-level result.
