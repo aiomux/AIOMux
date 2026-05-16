@@ -12,12 +12,12 @@ namespace AIOMux.Core.Dispatch;
 ///
 /// Every call to <see cref="InvokeAsync"/> follows a strict linear sequence:
 ///   1. Emit <see cref="ToolProposedEvent"/>.
-///   2. If replay cache hit: emit <see cref="ToolResultEvent"/> and return early.
-///   3. Resolve the tool; synthesize an unrecognized analysis when the tool is absent.
-///   4. Call <c>ITool.Analyze</c> to classify requested operations.
-///   5. Call <see cref="IPolicyEngine.Evaluate"/>; emit <see cref="PolicyEvaluatedEvent"/>.
-///   6. If denied: return with <see cref="ToolDispatchResult.PolicyDenied"/> set.
-///   7. Call <c>ITool.ExecuteAsync</c>; emit <see cref="ToolExecutedEvent"/>.
+///   2. Resolve the tool; synthesize an unrecognized analysis when the tool is absent.
+///   3. Call <c>ITool.Analyze</c> to classify requested operations.
+///   4. Call <see cref="IPolicyEngine.Evaluate"/>; emit <see cref="PolicyEvaluatedEvent"/>.
+///   5. If denied: return with <see cref="ToolDispatchResult.PolicyDenied"/> set.
+///   6. If replay cache hit after policy approval: emit <see cref="ToolResultEvent"/> and return.
+///   7. Call dispatcher-owned execution path; emit <see cref="ToolExecutedEvent"/>.
 ///   8. Emit <see cref="ToolResultEvent"/> and return.
 /// </summary>
 public sealed class ToolDispatcher

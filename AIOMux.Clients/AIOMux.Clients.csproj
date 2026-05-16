@@ -9,11 +9,11 @@
     <Authors>Adrian Cantu</Authors>
     <Company>AIOMux</Company>
     <Product>AIOMux Clients</Product>
-    <Description>Provides Language Model client implementations and abstractions for agent interaction. AIOMux.LLM is deprecated</Description>
-    <PackageProjectUrl>aiomux.io</PackageProjectUrl>
+    <Description>LLM client implementations for AIOMux, including Ollama and OpenAI integrations for agent-driven workflows.</Description>
+    <PackageProjectUrl>https://aiomux.ai</PackageProjectUrl>
     <RepositoryUrl>https://github.com/aiomux/AIOMux/</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>AI;Artificial-Intelligence;Agent;Agents;Orchestration;LLM;Large-Language-Model;Plugin;Tools;AI-Orchestration;Agent-Framework;C#;.NET;.NetCore;</PackageTags>
+    <PackageTags>aiomux;llm;ollama;openai;agents;AI;Artificial-Intelligence;Agent;Orchestration;LLM;Large-Language-Model;AI-Orchestration;Agent-Framework;C#;.NET;.NetCore;</PackageTags>
     <PackageReleaseNotes>Minor updates.</PackageReleaseNotes>
   </PropertyGroup>
 

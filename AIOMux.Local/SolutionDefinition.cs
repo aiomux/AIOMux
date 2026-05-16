@@ -23,8 +23,8 @@ public sealed class SolutionDefinition
     public string Entry { get; set; } = string.Empty;
 
     /// <summary>
-    /// Path to policy configuration file (optional).
-    /// If null, defaults to AllowAllPolicyEngine.
+    /// Path to the policy configuration file. Required for solution execution.
+    /// Validation fails if this field is null or empty, or if the referenced file does not exist.
     /// </summary>
     public string? PolicyConfig { get; set; }
 
@@ -148,7 +148,7 @@ public sealed class ConnectorDeclaration
 public sealed class LlmConfiguration
 {
     /// <summary>
-    /// LLM provider identifier (for example: "ollama" or "none").
+    /// LLM provider identifier (for example: "ollama" or "openai").
     /// </summary>
     public string? Provider { get; set; }
 
@@ -166,4 +166,19 @@ public sealed class LlmConfiguration
     /// Maximum number of requests allowed per minute.
     /// </summary>
     public int MaxRequestsPerMinute { get; set; } = 60;
+
+    /// <summary>
+    /// Name of the environment variable that holds the API key.
+    /// Preferred over <see cref="ApiKey"/> when both are set.
+    /// The resolved value is never logged or stored in execution records.
+    /// </summary>
+    public string? ApiKeyEnvironmentVariable { get; set; }
+
+    /// <summary>
+    /// Inline API key. Used as a fallback when <see cref="ApiKeyEnvironmentVariable"/> is not set
+    /// or the referenced environment variable is empty.
+    /// Prefer <see cref="ApiKeyEnvironmentVariable"/> to avoid storing credentials in solution.json.
+    /// The value is never logged or stored in execution records.
+    /// </summary>
+    public string? ApiKey { get; set; }
 }

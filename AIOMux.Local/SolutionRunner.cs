@@ -21,6 +21,8 @@ namespace AIOMux.Local;
 /// 3. Creates ExecutionContext with appropriate configuration
 /// 4. Executes through ExecutionRuntime
 /// 5. Returns execution summary
+/// A valid <c>policyConfig</c> path is required in the solution manifest; load fails if it is absent or the referenced file does not exist.
+/// All tool execution is routed through <c>ToolDispatcher</c> with mandatory policy evaluation; no direct tool execution paths are supported.
 /// </summary>
 public class SolutionRunner
 {
@@ -458,7 +460,7 @@ public class SolutionRunner
     /// <summary>
     /// Registers built-in and assembly-provided agents and tools, then resolves declared connectors.
     /// Agent assemblies are loaded through <see cref="IAgentManager.LoadAgentsFromAssemblyAsync(string, Dictionary{string, ILLMClient}?, Dictionary{string, object}?)"/>
-    /// so each agent can resolve its preferred LLM profile.
+    /// so each discovered agent can resolve its preferred LLM profile.
     /// </summary>
     private async Task<List<ResolvedConnector>> ScanAndRegisterAsync(
         SolutionDefinition solution,
@@ -539,23 +541,58 @@ public class SolutionRunner
     private static ILLMClient CreateLlmClient(LlmConfiguration config)
     {
         if (string.IsNullOrWhiteSpace(config.Provider))
-            throw new InvalidOperationException("LLM profile must specify a provider.");
+            throw new InvalidOperationException("LLM profile must specify a 'provider'.");
+
+        if (config.MaxRequestsPerMinute < 0)
+            throw new InvalidOperationException($"LLM profile 'maxRequestsPerMinute' must be null or greater than zero. Current value: {config.MaxRequestsPerMinute}.");
 
         var provider = config.Provider.Trim().ToLowerInvariant();
         return provider switch
         {
             "ollama" => CreateOllamaClient(config),
-            _ => throw new InvalidOperationException($"Unknown LLM provider '{config.Provider}'.")
+            "openai" => CreateOpenAIClient(config),
+            _ => throw new InvalidOperationException($"Unknown LLM provider '{config.Provider}'. Supported providers: 'ollama', 'openai'.")
         };
     }
 
     private static ILLMClient CreateOllamaClient(LlmConfiguration config)
     {
-        var model = string.IsNullOrWhiteSpace(config.Model) ? "llama3" : config.Model;
-        var endpoint = string.IsNullOrWhiteSpace(config.Endpoint) ? "http://localhost:11434" : config.Endpoint;
+        if (string.IsNullOrWhiteSpace(config.Model))
+            throw new InvalidOperationException("Ollama LLM profile must specify a 'model'.");
+
+        if (string.IsNullOrWhiteSpace(config.Endpoint))
+            throw new InvalidOperationException("Ollama LLM profile must specify an 'endpoint'.");
+
         var maxRequestsPerMinute = config.MaxRequestsPerMinute > 0 ? config.MaxRequestsPerMinute : 60;
 
-        return new OllamaClient(model, maxRequestsPerMinute, endpoint);
+        return new OllamaClient(config.Model, maxRequestsPerMinute, config.Endpoint);
+    }
+
+    private static ILLMClient CreateOpenAIClient(LlmConfiguration config)
+    {
+        if (string.IsNullOrWhiteSpace(config.Model))
+            throw new InvalidOperationException("OpenAI LLM profile must specify a 'model'.");
+
+        var apiKey = string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(config.ApiKeyEnvironmentVariable))
+            apiKey = Environment.GetEnvironmentVariable(config.ApiKeyEnvironmentVariable) ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(config.ApiKey))
+            apiKey = config.ApiKey;
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            var hint = string.IsNullOrWhiteSpace(config.ApiKeyEnvironmentVariable)
+                ? "Set 'apiKeyEnvironmentVariable' or 'apiKey' in the LLM profile."
+                : $"Environment variable '{config.ApiKeyEnvironmentVariable}' is not set or empty. Set it or use 'apiKey' in the LLM profile.";
+            throw new InvalidOperationException($"OpenAI LLM profile requires an API key. {hint}");
+        }
+
+        var baseUrl = string.IsNullOrWhiteSpace(config.Endpoint) ? null : config.Endpoint;
+        var maxRequestsPerMinute = config.MaxRequestsPerMinute > 0 ? config.MaxRequestsPerMinute : 60;
+
+        return new OpenAIClient(apiKey, config.Model, baseUrl, maxRequestsPerMinute);
     }
 
     /// <summary>

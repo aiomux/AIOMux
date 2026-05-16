@@ -7,7 +7,8 @@ using System.Reflection;
 namespace AIOMux.Local;
 
 /// <summary>
-/// Performs a minimal validation pass for demo-critical solution setup.
+/// Performs a full validation pass for a solution manifest before execution.
+/// Validates required fields, referenced files, connector configuration, plan structure, and agent availability.
 /// </summary>
 public sealed class SolutionValidator
 {

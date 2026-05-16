@@ -33,7 +33,7 @@ public sealed class PlannerAgent : IAgent
 
         var systemPrompt = BuildSystemPrompt(availableAgents);
         var userInput = StepInputResolver.GetInputString(inputs, "input", context.GetInput());
-        var raw = await _llmClient.CompleteAsync(userInput, systemPrompt);
+        var raw = await _llmClient.CompleteAsync(userInput, systemPrompt, cancellationToken);
         var json = TryExtractJsonArray(raw);
 
         if (TryValidatePlan(json, availableAgents, out var validated))

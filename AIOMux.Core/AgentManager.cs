@@ -6,12 +6,12 @@ using System.Text;
 namespace AIOMux.Core;
 
 /// <summary>
-/// Manages agent registration, extension loading, and retrieval.
+/// Manages agent registration, external assembly loading, and retrieval.
 /// </summary>
 public class AgentManager : IAgentManager
 {
     private readonly List<IAgent> _agents = [];
-    private readonly List<IAgent> _loadedExtensionAgents = [];
+    private readonly List<IAgent> _loadedExternalAgents = [];
     private readonly ILogger<AgentManager>? _logger;
     public ILoggerFactory? LoggerFactory { get; }
 
@@ -74,7 +74,7 @@ public class AgentManager : IAgentManager
     }
 
     /// <summary>
-    /// Loads a single extension assembly asynchronously.
+    /// Loads agents from a single assembly asynchronously.
     /// </summary>
     /// <param name="assemblyPath">Path to the assembly.</param>
     /// <param name="llmProfiles">Named LLM client profiles. Each agent's preferred profile is
@@ -85,11 +85,11 @@ public class AgentManager : IAgentManager
     {
         try
         {
-            _logger?.LogInformation("Attempting to load extension assembly from: {AssemblyPath}", assemblyPath);
+            _logger?.LogInformation("Attempting to load agent assembly from: {AssemblyPath}", assemblyPath);
 
             if (!File.Exists(assemblyPath))
             {
-                _logger?.LogError("Extension assembly not found: {AssemblyPath}", assemblyPath);
+                _logger?.LogError("Agent assembly not found: {AssemblyPath}", assemblyPath);
                 return false;
             }
 
@@ -134,7 +134,7 @@ public class AgentManager : IAgentManager
                     }
 
                     Register(agent);
-                    _loadedExtensionAgents.Add(agent);
+                    _loadedExternalAgents.Add(agent);
                     loadedAny = true;
 
                     _logger?.LogInformation("Successfully loaded agent: {AgentName} from {AgentType}",
@@ -150,15 +150,15 @@ public class AgentManager : IAgentManager
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error loading extension assembly: {AssemblyPath}", assemblyPath);
+            _logger?.LogError(ex, "Error loading agent assembly: {AssemblyPath}", assemblyPath);
             return false;
         }
     }
 
     /// <summary>
-    /// Loads extensions from a directory asynchronously.
+    /// Loads agents from assemblies in a directory asynchronously.
     /// </summary>
-    /// <param name="directoryPath">Directory containing extension assemblies.</param>
+    /// <param name="directoryPath">Directory containing agent assemblies.</param>
     /// <param name="llmProfiles">Named LLM client profiles passed through to each loaded agent.</param>
     /// <param name="configuration">Optional configuration for loaded agents.</param>
     /// <returns>Number of assemblies with at least one successfully loaded agent.</returns>
@@ -166,7 +166,7 @@ public class AgentManager : IAgentManager
     {
         if (!Directory.Exists(directoryPath))
         {
-            _logger?.LogWarning("Extension directory does not exist: {DirectoryPath}", directoryPath);
+            _logger?.LogWarning("Agent assembly directory does not exist: {DirectoryPath}", directoryPath);
             return 0;
         }
 
@@ -179,18 +179,18 @@ public class AgentManager : IAgentManager
                 loadedCount++;
         }
 
-        _logger?.LogInformation("Loaded {LoadedCount} extension assembly(ies) from directory: {DirectoryPath}",
+        _logger?.LogInformation("Loaded {LoadedCount} agent assembly(ies) from directory: {DirectoryPath}",
             loadedCount, directoryPath);
 
         return loadedCount;
     }
 
     /// <summary>
-    /// Unloads all extension agents and cleans up resources.
+    /// Unloads all externally loaded agents and cleans up resources.
     /// </summary>
     public async Task UnloadExternalAgentsAsync()
     {
-        foreach (var agent in _loadedExtensionAgents)
+        foreach (var agent in _loadedExternalAgents)
         {
             try
             {
@@ -202,11 +202,11 @@ public class AgentManager : IAgentManager
             }
         }
 
-        foreach (var agent in _loadedExtensionAgents)
+        foreach (var agent in _loadedExternalAgents)
             _agents.Remove(agent);
 
-        _loadedExtensionAgents.Clear();
-        _logger?.LogInformation("All extension agents have been unloaded");
+        _loadedExternalAgents.Clear();
+        _logger?.LogInformation("All externally loaded agents have been unloaded");
     }
 
     /// <summary>
