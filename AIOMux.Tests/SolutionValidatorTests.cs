@@ -1,3 +1,4 @@
+using AIOMux.Connectors.Console;
 using AIOMux.Local;
 
 namespace AIOMux.Tests;
@@ -11,18 +12,23 @@ public sealed class SolutionValidatorTests
 
         try
         {
+            var connectorPath = GetConnectorPackagePath();
             await WritePlanAsync(solutionDirectory, "echo");
+            await WritePolicyAsync(solutionDirectory);
             await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "solution.json"),
-                """
+                $$"""
                 {
                   "name": "invalid-duplicate-connectors",
                   "entry": "plan.json",
+                  "policyConfig": "policy.json",
                   "entryAgent": "echo",
-                  "connectors": [
+                  "connectorConfigurations": [
                     { "type": "console", "name": "dup" },
                     { "type": "console", "name": "dup" }
                   ],
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": ["{{connectorPath.Replace("\\", "\\\\")}}"]
                 }
                 """);
 
@@ -45,17 +51,22 @@ public sealed class SolutionValidatorTests
 
         try
         {
+            var connectorPath = GetConnectorPackagePath();
             await WritePlanAsync(solutionDirectory, "echo");
+            await WritePolicyAsync(solutionDirectory);
             await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "solution.json"),
-                """
+                $$"""
                 {
                   "name": "invalid-connector-type",
                   "entry": "plan.json",
+                  "policyConfig": "policy.json",
                   "entryAgent": "echo",
-                  "connectors": [
+                  "connectorConfigurations": [
                     { "type": "does-not-exist", "name": "input" }
                   ],
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": ["{{connectorPath.Replace("\\", "\\\\")}}"]
                 }
                 """);
 
@@ -78,16 +89,21 @@ public sealed class SolutionValidatorTests
 
         try
         {
+            var connectorPath = GetConnectorPackagePath();
             await WritePlanAsync(solutionDirectory, "does-not-exist");
+            await WritePolicyAsync(solutionDirectory);
             await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "solution.json"),
-                """
+                $$"""
                 {
                   "name": "invalid-agent",
                   "entry": "plan.json",
-                  "connectors": [
+                  "policyConfig": "policy.json",
+                  "connectorConfigurations": [
                     { "type": "console", "name": "input" }
                   ],
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": ["{{connectorPath.Replace("\\", "\\\\")}}"]
                 }
                 """);
 
@@ -95,7 +111,7 @@ public sealed class SolutionValidatorTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 validator.ValidateAsync(Path.Combine(solutionDirectory, "solution.json")));
 
-            Assert.Contains("not available as a built-in agent", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("not available as a built-in or extension agent", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -126,6 +142,18 @@ public sealed class SolutionValidatorTests
             }
             """);
     }
+
+    private static async Task WritePolicyAsync(string solutionDirectory)
+    {
+        await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "policy.json"),
+            """
+            {
+              "type": "allowall"
+            }
+            """);
+    }
+
+    private static string GetConnectorPackagePath() => typeof(ConsoleConnector).Assembly.Location;
 
     private static void DeleteDirectory(string solutionDirectory)
     {

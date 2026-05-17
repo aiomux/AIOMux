@@ -1,3 +1,4 @@
+using AIOMux.Connectors.Console;
 using AIOMux.Local;
 
 namespace AIOMux.Tests;
@@ -12,6 +13,7 @@ public sealed class LocalRunnerEndToEndTests
 
         try
         {
+            var connectorPath = typeof(ConsoleConnector).Assembly.Location;
             var planPath = Path.Combine(solutionDirectory, "plan.json");
             await File.WriteAllTextAsync(planPath,
                 """
@@ -27,14 +29,22 @@ public sealed class LocalRunnerEndToEndTests
                 }
                 """);
 
+            await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "policy.json"),
+                """
+                {
+                  "type": "allowall"
+                }
+                """);
+
             var solutionPath = Path.Combine(solutionDirectory, "solution.json");
             await File.WriteAllTextAsync(solutionPath,
-                """
+                $$"""
                 {
                   "name": "console-echo",
                   "entry": "plan.json",
+                  "policyConfig": "policy.json",
                   "entryAgent": "echo",
-                  "connectors": [
+                  "connectorConfigurations": [
                     {
                       "type": "console",
                       "name": "console-input",
@@ -43,7 +53,9 @@ public sealed class LocalRunnerEndToEndTests
                       }
                     }
                   ],
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": ["{{connectorPath.Replace("\\", "\\\\")}}"]
                 }
                 """);
 

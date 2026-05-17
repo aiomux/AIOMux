@@ -36,6 +36,13 @@ public class ExecutionRuntime : IExecutionRuntime
         var sw = Stopwatch.StartNew();
         ExecutionContext? activeContext = null;
 
+        if (context != null)
+        {
+            var earlyServices = context.Services ?? new ExecutionRuntimeServices();
+            if (earlyServices.PolicyEngine is null)
+                throw new InvalidOperationException("ExecutionRuntimeServices requires a configured policy engine.");
+        }
+
         try
         {
             if (plan == null)
@@ -68,10 +75,12 @@ public class ExecutionRuntime : IExecutionRuntime
 
                 var stepStart = DateTimeOffset.UtcNow;
                 var stepSw = Stopwatch.StartNew();
+                var selectedLlmProfile = ResolveSelectedLlmProfile(step, services);
+                var stepResult = new StepExecutionResult();
 
                 try
                 {
-                    var stepResult = await ExecuteStepAsync(step, ctx, services, cancellationToken);
+                    stepResult = await ExecuteStepAsync(step, ctx, services, cancellationToken);
                     stepSw.Stop();
 
                     if (!stepResult.Success)
@@ -86,11 +95,14 @@ public class ExecutionRuntime : IExecutionRuntime
                             StepIndex = i,
                             Type = step.Type,
                             Target = step.Target,
+                            LlmProfile = selectedLlmProfile,
                             Input = ctx.GetInput(),
+                            ToolTargets = stepResult.ToolTargets.ToList(),
                             Success = false,
                             Error = msg,
                             PolicyDenyReason = stepResult.PolicyDenyReason,
                             PolicyHash = stepResult.PolicyHash,
+                            PolicyType = stepResult.PolicyType,
                             Timestamp = stepStart,
                             DurationMs = stepSw.Elapsed.TotalMilliseconds
                         });
@@ -120,13 +132,16 @@ public class ExecutionRuntime : IExecutionRuntime
                         StepIndex = i,
                         Type = step.Type,
                         Target = step.Target,
+                        LlmProfile = selectedLlmProfile,
                         Input = ctx.GetInput(),
+                        ToolTargets = stepResult.ToolTargets.ToList(),
                         Output = output,
                         OutputKey = outputKey,
                         StateChanges = stateChanges,
                         Success = true,
                         PolicyDenyReason = stepResult.PolicyDenyReason,
                         PolicyHash = stepResult.PolicyHash,
+                        PolicyType = stepResult.PolicyType,
                         Timestamp = stepStart,
                         DurationMs = stepSw.Elapsed.TotalMilliseconds
                     });
@@ -145,13 +160,14 @@ public class ExecutionRuntime : IExecutionRuntime
                         StepIndex = i,
                         Type = step.Type,
                         Target = step.Target,
+                        LlmProfile = selectedLlmProfile,
                         Input = ctx.GetInput(),
+                        ToolTargets = stepResult.ToolTargets.ToList(),
                         Success = false,
                         Error = msg,
                         Timestamp = stepStart,
                         DurationMs = stepSw.Elapsed.TotalMilliseconds
                     });
-
                     return new ExecutionResult { Success = false, Error = msg, StepIndex = i, StepId = step.Id };
                 }
                 catch (Exception ex)
@@ -167,7 +183,9 @@ public class ExecutionRuntime : IExecutionRuntime
                         StepIndex = i,
                         Type = step.Type,
                         Target = step.Target,
+                        LlmProfile = selectedLlmProfile,
                         Input = ctx.GetInput(),
+                        ToolTargets = stepResult.ToolTargets.ToList(),
                         Success = false,
                         Error = ex.Message,
                         Timestamp = stepStart,
@@ -251,7 +269,7 @@ public class ExecutionRuntime : IExecutionRuntime
 
         var dispatcher = new ToolDispatcher(
             services.Tools,
-            services.PolicyEngine,
+            services.PolicyEngine!,
             services.ReplayMode,
             services.ReplayToolResults,
             _logger);
@@ -266,7 +284,9 @@ public class ExecutionRuntime : IExecutionRuntime
                 Success = false,
                 Error = dispatch.PolicyDenyReason ?? "Step execution denied by policy.",
                 PolicyDenyReason = dispatch.PolicyDenyReason,
-                PolicyHash = dispatch.PolicyHash
+                PolicyHash = dispatch.PolicyHash,
+                PolicyType = dispatch.PolicyType,
+                ToolTargets = dispatch.Targets
             };
         }
 
@@ -277,7 +297,9 @@ public class ExecutionRuntime : IExecutionRuntime
         {
             Success = true,
             Output = dispatch.ToolResult.JsonResult,
-            PolicyHash = dispatch.PolicyHash
+            PolicyHash = dispatch.PolicyHash,
+            PolicyType = dispatch.PolicyType,
+            ToolTargets = dispatch.Targets
         };
     }
 
@@ -311,6 +333,28 @@ public class ExecutionRuntime : IExecutionRuntime
         {
             // Persistence failures should not mask execution results.
         }
+    }
+
+    private static string? ResolveSelectedLlmProfile(ExecutionStep step, ExecutionRuntimeServices services)
+    {
+        if (!string.Equals(step.Type, "agent", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (services.AgentManager == null)
+            return null;
+
+        var agent = services.AgentManager.GetByName(step.Target);
+        if (agent == null)
+            return null;
+
+        var preferred = agent.Metadata.PreferredLlmProfile ?? "default";
+        if (services.LlmClientResolver == null)
+            return preferred;
+
+        if (services.LlmClientResolver.TryResolve(preferred, out _))
+            return preferred;
+
+        return services.LlmClientResolver.TryResolve("default", out _) ? "default" : null;
     }
 
     private static void PublishAvailableAgents(ExecutionRuntimeServices services, ExecutionContext context)

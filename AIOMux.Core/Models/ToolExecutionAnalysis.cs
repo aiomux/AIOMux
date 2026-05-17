@@ -15,6 +15,11 @@ public sealed class ToolExecutionAnalysis
     public IReadOnlyCollection<ToolOperation> RequestedOperations { get; init; } = [];
 
     /// <summary>
+    /// The intended execution targets for this invocation.
+    /// </summary>
+    public IReadOnlyCollection<ToolTarget> Targets { get; init; } = [];
+
+    /// <summary>
     /// Indicates whether the tool was able to classify the invocation.
     /// When false the runtime will deny execution regardless of policy.
     /// </summary>
@@ -30,6 +35,14 @@ public sealed class ToolExecutionAnalysis
     /// </summary>
     public static ToolExecutionAnalysis Recognized(params ToolOperation[] operations) =>
         new() { IsRecognized = true, RequestedOperations = operations };
+
+    /// <summary>
+    /// Creates a recognized analysis result with operations and explicit targets.
+    /// </summary>
+    public static ToolExecutionAnalysis Recognized(
+        IReadOnlyCollection<ToolOperation> operations,
+        IReadOnlyCollection<ToolTarget> targets) =>
+        new() { IsRecognized = true, RequestedOperations = operations, Targets = targets };
 
     /// <summary>
     /// Creates an unrecognized analysis result with a mandatory reason.

@@ -7,6 +7,7 @@ namespace AIOMux.Core.Interfaces;
 /// <summary>
 /// Contract every agent must implement.
 /// Provides execution capability, identity, and optional metadata for discovery and introspection.
+/// Agents execute steps and rely on runtime dispatcher and policy flow for tool usage.
 /// </summary>
 public interface IAgent
 {

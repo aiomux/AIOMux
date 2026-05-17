@@ -29,6 +29,9 @@ public sealed class ForkReplayExecutor
         if (context == null)
             return new ExecutionResult { Success = false, Error = "Fork context cannot be null" };
 
+        if (context.Services is null || context.Services.PolicyEngine is null)
+            throw new InvalidOperationException("ExecutionRuntimeServices requires a configured policy engine.");
+
         try
         {
             var sourceRecords = await ForkReplayHelper.LoadRecordsAsync(sourceRunId, context.WorkingDirectory, cancellationToken);
@@ -42,7 +45,7 @@ public sealed class ForkReplayExecutor
             context.State["fork.stepIndex"] = stepIndex;
             context.State["fork.summary"] = summary;
 
-            var services = context.Services ?? new ExecutionRuntimeServices();
+            var services = context.Services;
             context.Services = services;
             services.ReplayToolResults = services.ReplayMode == ReplayMode.None
                 ? new Dictionary<string, ToolResult>(StringComparer.Ordinal)

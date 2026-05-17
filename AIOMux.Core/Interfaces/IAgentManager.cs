@@ -30,26 +30,26 @@ public interface IAgentManager
     IEnumerable<(string Name, string Description)> GetAvailableAgents();
 
     /// <summary>
-    /// Loads agents from the specified assembly path.
-    /// Each agent's preferred LLM profile is resolved from <paramref name="llmProfiles"/>
+    /// Loads agents from the specified agent package path.
+    /// Each agent's preferred LLM profile is resolved from <paramref name="llmClientResolver"/>
     /// using <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to the "default" key.
     /// </summary>
-    /// <param name="assemblyPath">Path to the assembly.</param>
-    /// <param name="llmProfiles">Named LLM client profiles available to agents.</param>
+    /// <param name="assemblyPath">Path to the agent package file.</param>
+    /// <param name="llmClientResolver">Named LLM client resolver available to agents.</param>
     /// <param name="configuration">Optional configuration for loaded agents.</param>
     /// <returns>True if at least one agent was loaded successfully.</returns>
-    Task<bool> LoadAgentsFromAssemblyAsync(string assemblyPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null);
+    Task<bool> LoadAgentsFromAssemblyAsync(string assemblyPath, ILLMClientResolver? llmClientResolver = null, Dictionary<string, object>? configuration = null);
 
     /// <summary>
-    /// Loads agents from all matching assemblies in the specified directory.
-    /// Each agent's preferred LLM profile is resolved from <paramref name="llmProfiles"/>
+    /// Loads agents from all matching agent package files in the specified directory.
+    /// Each agent's preferred LLM profile is resolved from <paramref name="llmClientResolver"/>
     /// using <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to the "default" key.
     /// </summary>
-    /// <param name="directoryPath">Directory containing agent assemblies.</param>
-    /// <param name="llmProfiles">Named LLM client profiles available to agents.</param>
+    /// <param name="directoryPath">Directory containing agent package files.</param>
+    /// <param name="llmClientResolver">Named LLM client resolver available to agents.</param>
     /// <param name="configuration">Optional configuration for loaded agents.</param>
-    /// <returns>Number of assemblies that loaded at least one agent.</returns>
-    Task<int> LoadAgentsFromDirectoryAsync(string directoryPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null);
+    /// <returns>Number of package files that loaded at least one agent.</returns>
+    Task<int> LoadAgentsFromDirectoryAsync(string directoryPath, ILLMClientResolver? llmClientResolver = null, Dictionary<string, object>? configuration = null);
 
     /// <summary>
     /// Unloads all externally loaded agents and cleans up resources.

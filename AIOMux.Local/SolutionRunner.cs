@@ -1,5 +1,4 @@
 using AIOMux.Clients;
-using AIOMux.Connectors;
 using AIOMux.Core;
 using AIOMux.Core.Builders;
 using AIOMux.Core.Interfaces;
@@ -52,7 +51,7 @@ public class SolutionRunner
 
     /// <summary>
     /// Loads a solution from its solution.json file without executing it.
-    /// Scans declared assemblies for <c>IAgent</c> and <c>ITool</c> implementations,
+    /// Scans declared agent and tool packages for <c>IAgent</c> and <c>ITool</c> implementations,
     /// resolves declared connectors, and registers discovered agents and tools into the runtime services.
     /// </summary>
     /// <param name="solutionJsonPath">Path to solution.json</param>
@@ -72,17 +71,20 @@ public class SolutionRunner
         var planBuilder = new JsonExecutionPlanBuilder(planJson, planName: solution.Name);
         var plan = await planBuilder.BuildAsync(cancellationToken);
 
+        var llmProfiles = BuildLlmProfileMap(solution);
+        var llmClientResolver = new LLMClientResolver(llmProfiles);
+
         var agentManager = _agentManager ?? new AgentManager(_loggerFactory);
         var services = new ExecutionRuntimeServices
         {
             Tools = new Dictionary<string, ITool>(_tools ?? [], StringComparer.OrdinalIgnoreCase),
             AgentManager = agentManager,
+            LlmClientResolver = llmClientResolver,
             Options = BuildExecutionOptions(solution),
-            PolicyEngine = LoadPolicyEngine(solution.PolicyConfig)
+            PolicyEngine = LoadPolicyEngine(solution.PolicyConfig, solution.Mode)
         };
 
-        var llmProfiles = BuildLlmProfileMap(solution);
-        var connectors = await ScanAndRegisterAsync(solution, services, llmProfiles);
+        var connectors = await ScanAndRegisterAsync(solution, services, llmClientResolver);
 
         return new LoadedSolution
         {
@@ -162,6 +164,10 @@ public class SolutionRunner
                 _logger?.LogError("Solution '{SolutionName}' failed: {Error}", loaded.Name, result.Error);
 
             return summary;
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -381,7 +387,7 @@ public class SolutionRunner
     /// <summary>
     /// Loads the policy engine based on solution configuration.
     /// </summary>
-    private IPolicyEngine LoadPolicyEngine(string? policyConfigPath)
+    private IPolicyEngine LoadPolicyEngine(string? policyConfigPath, ExecutionMode mode = ExecutionMode.Development)
     {
         if (string.IsNullOrWhiteSpace(policyConfigPath))
             throw new InvalidOperationException("Policy configuration is required. Set 'policyConfig' in solution.json.");
@@ -414,11 +420,34 @@ public class SolutionRunner
 
         return config.Type.ToLowerInvariant() switch
         {
-            "allowall" => new AllowAllPolicyEngine(),
+            "allowall" => CreateAllowAllPolicyEngine(mode),
             "tooldenylist" => new ToolDenyListPolicyEngine(ResolveDeniedTools(config.Parameters)),
             "operationpolicy" => LoadOperationPolicyEngine(config.Parameters, policyConfigPath),
             _ => throw new InvalidOperationException($"Unknown policy engine type: {config.Type}")
         };
+    }
+
+    /// <summary>
+    /// Creates an <see cref="AllowAllPolicyEngine"/> after validating that the current
+    /// environment and execution mode permit its use.
+    /// Throws <see cref="InvalidOperationException"/> if the AIOMUX_DISABLE_ALLOWALL
+    /// environment variable is set to "true" or if the solution is running in Production mode.
+    /// </summary>
+    private AllowAllPolicyEngine CreateAllowAllPolicyEngine(ExecutionMode mode)
+    {
+        var disableEnv = Environment.GetEnvironmentVariable("AIOMUX_DISABLE_ALLOWALL");
+        if (string.Equals(disableEnv, "true", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "AllowAll policy is disabled by the AIOMUX_DISABLE_ALLOWALL environment variable. " +
+                "Remove the AllowAll policy configuration or unset the environment variable.");
+
+        if (mode == ExecutionMode.Production)
+            throw new InvalidOperationException(
+                "AllowAll policy is not permitted in Production mode. " +
+                "Use a restrictive policy engine or change the execution mode to Development.");
+
+        ILogger? logger = _loggerFactory?.CreateLogger<AllowAllPolicyEngine>();
+        return new AllowAllPolicyEngine(logger);
     }
 
     private static IEnumerable<string> ResolveDeniedTools(Dictionary<string, object?> parameters)
@@ -458,14 +487,14 @@ public class SolutionRunner
     }
 
     /// <summary>
-    /// Registers built-in and assembly-provided agents and tools, then resolves declared connectors.
-    /// Agent assemblies are loaded through <see cref="IAgentManager.LoadAgentsFromAssemblyAsync(string, Dictionary{string, ILLMClient}?, Dictionary{string, object}?)"/>
+    /// Registers built-in and package-provided agents and tools, then resolves declared connectors.
+    /// Agent packages are loaded through <see cref="IAgentManager.LoadAgentsFromAssemblyAsync(string, ILLMClientResolver?, Dictionary{string, object}?)"/>
     /// so each discovered agent can resolve its preferred LLM profile.
     /// </summary>
     private async Task<List<ResolvedConnector>> ScanAndRegisterAsync(
         SolutionDefinition solution,
         ExecutionRuntimeServices services,
-        Dictionary<string, ILLMClient> llmProfiles)
+        ILLMClientResolver llmClientResolver)
     {
         foreach (var agent in ScanAssemblyFor<IAgent>(typeof(IAgent).Assembly, _logger))
         {
@@ -476,7 +505,7 @@ public class SolutionRunner
             _logger?.LogInformation("Discovered built-in agent '{Name}'", agent.Name);
         }
 
-        llmProfiles.TryGetValue("default", out var defaultLlmClient);
+        llmClientResolver.TryResolve("default", out var defaultLlmClient);
         services.AgentManager?.Register(new PlannerAgent(defaultLlmClient));
         _logger?.LogInformation(
             defaultLlmClient == null
@@ -493,28 +522,69 @@ public class SolutionRunner
             _logger?.LogInformation("Discovered built-in tool '{Name}'", tool.Name);
         }
 
-        foreach (var assemblyPath in solution.Assemblies)
+        foreach (var agentPackage in solution.Agents)
         {
-            if (services.AgentManager != null)
-                await services.AgentManager.LoadAgentsFromAssemblyAsync(assemblyPath, llmProfiles);
+            ValidateRolePackage(agentPackage, expectedRole: "agent");
 
-            foreach (var tool in ScanAssemblyFor<ITool>(assemblyPath, _logger))
+            if (services.AgentManager != null)
+                await services.AgentManager.LoadAgentsFromAssemblyAsync(agentPackage, llmClientResolver);
+        }
+
+        foreach (var toolPackage in solution.Tools)
+        {
+            ValidateRolePackage(toolPackage, expectedRole: "tool");
+
+            foreach (var tool in ScanAssemblyFor<ITool>(toolPackage, _logger))
             {
                 if (tool is not DispatchableToolBase)
-                    throw new InvalidOperationException($"Tool '{tool.Name}' from '{assemblyPath}' must inherit DispatchableToolBase.");
+                    throw new InvalidOperationException($"Tool '{tool.Name}' from '{toolPackage}' must inherit DispatchableToolBase.");
 
                 services.Tools[tool.Name] = tool;
-                _logger?.LogInformation("Discovered tool '{Name}' from {Path}", tool.Name, assemblyPath);
+                _logger?.LogInformation("Discovered tool '{Name}' from {Path}", tool.Name, toolPackage);
             }
         }
 
-        if (solution.Connectors.Count == 0)
+        var discoveredConnectorTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+        foreach (var connectorPackage in solution.Connectors)
+        {
+            ValidateRolePackage(connectorPackage, expectedRole: "connector");
+
+            foreach (var connector in ScanAssemblyFor<IConnector>(connectorPackage, _logger))
+            {
+                var connectorName = connector.Name?.Trim();
+                if (string.IsNullOrWhiteSpace(connectorName))
+                    throw new InvalidOperationException($"Connector implementation '{connector.GetType().FullName}' from '{connectorPackage}' returned an empty Name.");
+
+                var implementationType = connector.GetType();
+                if (discoveredConnectorTypes.TryGetValue(connectorName, out var existingType) && existingType != implementationType)
+                {
+                    throw new InvalidOperationException(
+                        $"Connector name '{connectorName}' is declared by multiple implementations: '{existingType.FullName}' and '{implementationType.FullName}'.");
+                }
+
+                discoveredConnectorTypes[connectorName] = implementationType;
+                _logger?.LogInformation("Discovered connector '{Name}' from {Path}", connectorName, connectorPackage);
+            }
+        }
+
+        if (solution.ConnectorConfigurations.Count == 0)
             return [];
 
         var resolved = new List<ResolvedConnector>();
-        foreach (var declaration in solution.Connectors)
+        foreach (var declaration in solution.ConnectorConfigurations)
         {
-            var connector = BuiltInConnectorRegistry.Create(declaration.Type);
+            if (!discoveredConnectorTypes.TryGetValue(declaration.Type, out var connectorType))
+            {
+                throw new InvalidOperationException(
+                    $"Connector '{declaration.Name}' declares unknown type '{declaration.Type}'. Declare the connector DLL in the 'connectors' list and ensure it exposes an IConnector named '{declaration.Type}'.");
+            }
+
+            if (Activator.CreateInstance(connectorType) is not IConnector connector)
+            {
+                throw new InvalidOperationException(
+                    $"Could not create connector '{declaration.Type}' from type '{connectorType.FullName}'.");
+            }
+
             resolved.Add(new ResolvedConnector
             {
                 Connector = connector,
@@ -532,46 +602,51 @@ public class SolutionRunner
 
         foreach (var (name, config) in solution.LlmProfiles)
         {
-            profiles[name] = CreateLlmClient(config);
+            if (string.IsNullOrWhiteSpace(name))
+                throw new InvalidOperationException("Invalid profile config: profile name cannot be empty.");
+
+            var client = CreateLlmClient(config, name);
+            if (!profiles.TryAdd(name, client))
+                throw new InvalidOperationException($"Duplicate LLM profile '{name}' is not allowed.");
         }
 
         return profiles;
     }
 
-    private static ILLMClient CreateLlmClient(LlmConfiguration config)
+    private static ILLMClient CreateLlmClient(LlmConfiguration config, string profileName)
     {
         if (string.IsNullOrWhiteSpace(config.Provider))
-            throw new InvalidOperationException("LLM profile must specify a 'provider'.");
+            throw new InvalidOperationException($"Invalid profile config '{profileName}': provider is required.");
 
         if (config.MaxRequestsPerMinute < 0)
-            throw new InvalidOperationException($"LLM profile 'maxRequestsPerMinute' must be null or greater than zero. Current value: {config.MaxRequestsPerMinute}.");
+            throw new InvalidOperationException($"Invalid profile config '{profileName}': maxRequestsPerMinute must be greater than or equal to zero.");
 
         var provider = config.Provider.Trim().ToLowerInvariant();
         return provider switch
         {
-            "ollama" => CreateOllamaClient(config),
-            "openai" => CreateOpenAIClient(config),
-            _ => throw new InvalidOperationException($"Unknown LLM provider '{config.Provider}'. Supported providers: 'ollama', 'openai'.")
+            "ollama" => CreateOllamaClient(config, profileName),
+            "openai" => CreateOpenAIClient(config, profileName),
+            _ => throw new InvalidOperationException($"Invalid profile config '{profileName}': unknown provider '{config.Provider}'. Supported providers: 'ollama', 'openai'.")
         };
     }
 
-    private static ILLMClient CreateOllamaClient(LlmConfiguration config)
+    private static ILLMClient CreateOllamaClient(LlmConfiguration config, string profileName)
     {
         if (string.IsNullOrWhiteSpace(config.Model))
-            throw new InvalidOperationException("Ollama LLM profile must specify a 'model'.");
+            throw new InvalidOperationException($"Invalid profile config '{profileName}': ollama model is required.");
 
         if (string.IsNullOrWhiteSpace(config.Endpoint))
-            throw new InvalidOperationException("Ollama LLM profile must specify an 'endpoint'.");
+            throw new InvalidOperationException($"Invalid profile config '{profileName}': ollama endpoint is required.");
 
         var maxRequestsPerMinute = config.MaxRequestsPerMinute > 0 ? config.MaxRequestsPerMinute : 60;
 
         return new OllamaClient(config.Model, maxRequestsPerMinute, config.Endpoint);
     }
 
-    private static ILLMClient CreateOpenAIClient(LlmConfiguration config)
+    private static ILLMClient CreateOpenAIClient(LlmConfiguration config, string profileName)
     {
         if (string.IsNullOrWhiteSpace(config.Model))
-            throw new InvalidOperationException("OpenAI LLM profile must specify a 'model'.");
+            throw new InvalidOperationException($"Invalid profile config '{profileName}': openai model is required.");
 
         var apiKey = string.Empty;
 
@@ -586,7 +661,7 @@ public class SolutionRunner
             var hint = string.IsNullOrWhiteSpace(config.ApiKeyEnvironmentVariable)
                 ? "Set 'apiKeyEnvironmentVariable' or 'apiKey' in the LLM profile."
                 : $"Environment variable '{config.ApiKeyEnvironmentVariable}' is not set or empty. Set it or use 'apiKey' in the LLM profile.";
-            throw new InvalidOperationException($"OpenAI LLM profile requires an API key. {hint}");
+            throw new InvalidOperationException($"Invalid profile config '{profileName}': openai API key is required. {hint}");
         }
 
         var baseUrl = string.IsNullOrWhiteSpace(config.Endpoint) ? null : config.Endpoint;
@@ -635,6 +710,43 @@ public class SolutionRunner
         }
 
         return ScanAssemblyFor<T>(assembly, logger);
+    }
+
+    private static void ValidateRolePackage(string packagePath, string expectedRole)
+    {
+        var assembly = Assembly.LoadFrom(packagePath);
+
+        var hasAgent = assembly.GetTypes().Any(t => t.IsClass && !t.IsAbstract && typeof(IAgent).IsAssignableFrom(t));
+        var hasTool = assembly.GetTypes().Any(t => t.IsClass && !t.IsAbstract && typeof(ITool).IsAssignableFrom(t));
+        var hasConnector = assembly.GetTypes().Any(t => t.IsClass && !t.IsAbstract && typeof(IConnector).IsAssignableFrom(t));
+
+        switch (expectedRole)
+        {
+            case "agent":
+                if (!hasAgent)
+                    throw new InvalidOperationException($"Agent package '{packagePath}' does not contain any agent implementations.");
+                if (hasTool)
+                    throw new InvalidOperationException($"Agent package '{packagePath}' contains tool implementations, which is not allowed.");
+                if (hasConnector)
+                    throw new InvalidOperationException($"Agent package '{packagePath}' contains connector implementations, which is not allowed.");
+                break;
+            case "tool":
+                if (!hasTool)
+                    throw new InvalidOperationException($"Tool package '{packagePath}' does not contain any tool implementations.");
+                if (hasAgent)
+                    throw new InvalidOperationException($"Tool package '{packagePath}' contains agent implementations, which is not allowed.");
+                if (hasConnector)
+                    throw new InvalidOperationException($"Tool package '{packagePath}' contains connector implementations, which is not allowed.");
+                break;
+            case "connector":
+                if (hasAgent)
+                    throw new InvalidOperationException($"Connector package '{packagePath}' contains agent implementations, which is not allowed.");
+                if (hasTool)
+                    throw new InvalidOperationException($"Connector package '{packagePath}' contains tool implementations, which is not allowed.");
+                if (!hasConnector)
+                    throw new InvalidOperationException($"Connector package '{packagePath}' does not contain any connector implementations.");
+                break;
+        }
     }
 
     private static ExecutionOptions BuildExecutionOptions(SolutionDefinition solution) => new()

@@ -51,7 +51,9 @@ public sealed class SolutionRunnerIntegrationTests
                   "name": "policy-solution",
                   "entry": "plan.json",
                   "policyConfig": "policy.json",
-                  "assemblies": [],
+                  "agents": [],
+                  "tools": [],
+                  "connectors": [],
                   "executionOptions": {
                     "collectMetrics": false,
                     "generateJobSummary": false,
@@ -120,7 +122,9 @@ public sealed class SolutionRunnerIntegrationTests
                   "name": "tool-solution",
                   "entry": "plan.json",
                   "policyConfig": "policy.json",
-                  "assemblies": [],
+                  "agents": [],
+                  "tools": [],
+                  "connectors": [],
                   "executionOptions": {
                     "collectMetrics": false,
                     "generateJobSummary": false,
@@ -200,7 +204,9 @@ public sealed class SolutionRunnerIntegrationTests
                       "apiKey": "inline-fallback-key"
                     }
                   },
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": []
                 }
                 """
             );
@@ -274,7 +280,9 @@ public sealed class SolutionRunnerIntegrationTests
                       "apiKeyEnvironmentVariable": "{{envVarName}}"
                     }
                   },
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": []
                 }
                 """
             );
@@ -283,7 +291,7 @@ public sealed class SolutionRunnerIntegrationTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 runner.LoadAsync(Path.Combine(solutionDirectory, "solution.json")));
 
-            Assert.Contains("OpenAI LLM profile requires an API key", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Invalid profile config 'default': openai API key is required", ex.Message, StringComparison.Ordinal);
             Assert.Contains(envVarName, ex.Message, StringComparison.Ordinal);
         }
         finally
@@ -335,7 +343,9 @@ public sealed class SolutionRunnerIntegrationTests
                       "endpoint": "http://localhost:11434"
                     }
                   },
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": []
                 }
                 """
             );
@@ -344,7 +354,7 @@ public sealed class SolutionRunnerIntegrationTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 runner.LoadAsync(Path.Combine(solutionDirectory, "solution.json")));
 
-            Assert.Contains("Ollama LLM profile must specify a 'model'", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Invalid profile config 'default': ollama model is required", ex.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -394,7 +404,9 @@ public sealed class SolutionRunnerIntegrationTests
                       "model": "llama3"
                     }
                   },
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": []
                 }
                 """
             );
@@ -403,7 +415,7 @@ public sealed class SolutionRunnerIntegrationTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 runner.LoadAsync(Path.Combine(solutionDirectory, "solution.json")));
 
-            Assert.Contains("Ollama LLM profile must specify an 'endpoint'", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Invalid profile config 'default': ollama endpoint is required", ex.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -456,7 +468,9 @@ public sealed class SolutionRunnerIntegrationTests
                       "apiKeyEnvironmentVariable": "{{envVarName}}"
                     }
                   },
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": []
                 }
                 """
             );
@@ -465,7 +479,7 @@ public sealed class SolutionRunnerIntegrationTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 runner.LoadAsync(Path.Combine(solutionDirectory, "solution.json")));
 
-            Assert.Contains("OpenAI LLM profile must specify a 'model'", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Invalid profile config 'default': openai model is required", ex.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -518,7 +532,9 @@ public sealed class SolutionRunnerIntegrationTests
                       "maxRequestsPerMinute": -1
                     }
                   },
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": []
                 }
                 """
             );
@@ -527,7 +543,74 @@ public sealed class SolutionRunnerIntegrationTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 runner.LoadAsync(Path.Combine(solutionDirectory, "solution.json")));
 
-            Assert.Contains("maxRequestsPerMinute' must be null or greater than zero", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Invalid profile config 'default': maxRequestsPerMinute must be greater than or equal to zero", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(solutionDirectory))
+                Directory.Delete(solutionDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsync_WithDuplicateLlmProfiles_IgnoringCase_ThrowsDuplicateProfileError()
+    {
+        var solutionDirectory = Path.Combine(Path.GetTempPath(), "aiomux-llm-duplicate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(solutionDirectory);
+
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "plan.json"),
+                """
+                {
+                  "name": "duplicate-llm-plan",
+                  "steps": [
+                    {
+                      "id": "echo-step",
+                      "type": "agent",
+                      "target": "echo"
+                    }
+                  ]
+                }
+                """);
+
+            await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "policy.json"),
+                """
+                {
+                  "type": "allowall"
+                }
+                """);
+
+            await File.WriteAllTextAsync(Path.Combine(solutionDirectory, "solution.json"),
+                """
+                {
+                  "name": "duplicate-llm-solution",
+                  "entry": "plan.json",
+                  "policyConfig": "policy.json",
+                  "llmProfiles": {
+                    "fast-local": {
+                      "provider": "ollama",
+                      "model": "qwen2.5:7b",
+                      "endpoint": "http://localhost:11434"
+                    },
+                    "FAST-LOCAL": {
+                      "provider": "ollama",
+                      "model": "llava",
+                      "endpoint": "http://localhost:11434"
+                    }
+                  },
+                  "agents": [],
+                  "tools": [],
+                  "connectors": []
+                }
+                """);
+
+            var runner = new SolutionRunner();
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                runner.LoadAsync(Path.Combine(solutionDirectory, "solution.json")));
+
+            Assert.Contains("Duplicate LLM profile", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("FAST-LOCAL", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -582,7 +665,9 @@ public sealed class SolutionRunnerIntegrationTests
                       "apiKey": "{{sensitiveKey}}"
                     }
                   },
-                  "assemblies": []
+                  "agents": [],
+                  "tools": [],
+                  "connectors": []
                 }
                 """
             );
@@ -661,7 +746,9 @@ public sealed class SolutionRunnerIntegrationTests
                   "name": "replay-solution",
                   "entry": "plan.json",
                   "policyConfig": "policy.json",
-                  "assemblies": [],
+                  "agents": [],
+                  "tools": [],
+                  "connectors": [],
                   "executionOptions": {
                     "collectMetrics": false,
                     "generateJobSummary": false,
@@ -752,7 +839,9 @@ public sealed class SolutionRunnerIntegrationTests
                   "name": "fork-solution",
                   "entry": "plan.json",
                   "policyConfig": "policy.json",
-                  "assemblies": [],
+                  "agents": [],
+                  "tools": [],
+                  "connectors": [],
                   "executionOptions": {
                     "collectMetrics": false,
                     "generateJobSummary": false,
@@ -848,3 +937,5 @@ public sealed class SolutionRunnerIntegrationTests
         }
     }
 }
+
+

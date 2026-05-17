@@ -1,8 +1,10 @@
 using AIOMux.Core;
+using AIOMux.Core.Dispatch;
 using AIOMux.Core.Interfaces;
 using AIOMux.Core.Models;
 using AIOMux.Core.Policy;
 using AIOMux.Core.Replay;
+using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using ExecutionContext = AIOMux.Core.Models.ExecutionContext;
@@ -24,6 +26,7 @@ public sealed class ExecutionRuntimeIntegrationTests
             {
                 ["upper"] = new UppercaseTool()
             },
+            PolicyEngine = new AllowAllPolicyEngine(),
             Options = new ExecutionOptions
             {
                 CollectMetrics = false,
@@ -114,6 +117,7 @@ public sealed class ExecutionRuntimeIntegrationTests
             {
                 ["lookup"] = tool
             },
+            PolicyEngine = new AllowAllPolicyEngine(),
             ReplayMode = ReplayMode.ToolsOnly,
             ReplayToolResults = new Dictionary<string, ToolResult>(StringComparer.Ordinal)
             {
@@ -155,27 +159,127 @@ public sealed class ExecutionRuntimeIntegrationTests
         Assert.False(tool.WasCalled);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_AgentStep_RecordsSelectedLlmProfileName()
+    {
+        var agent = new PreferredProfileAgent();
+        var agentManager = new AgentManager();
+        agentManager.Register(agent);
+
+        var resolver = new LLMClientResolver(
+        [
+            new KeyValuePair<string, ILLMClient>("coding-local", new FakeLlmClient("ollama", "qwen2.5-coder")),
+            new KeyValuePair<string, ILLMClient>("default", new FakeLlmClient("ollama", "llama3"))
+        ]);
+
+        var services = new ExecutionRuntimeServices
+        {
+            AgentManager = agentManager,
+            LlmClientResolver = resolver,
+            PolicyEngine = new AllowAllPolicyEngine(),
+            Options = new ExecutionOptions
+            {
+                CollectMetrics = false,
+                GenerateJobSummary = false
+            }
+        };
+
+        var plan = new ExecutionPlan
+        {
+            Name = "agent-profile",
+            Steps =
+            [
+                new ExecutionStep
+                {
+                    Id = "agent-step",
+                    Type = "agent",
+                    Target = "preferred"
+                }
+            ]
+        };
+
+        var context = new ExecutionContext
+        {
+            Services = services,
+            Inputs = new Dictionary<string, object?> { ["input"] = "hello" }
+        };
+
+        var runtime = new ExecutionRuntime();
+        var result = await runtime.ExecuteAsync(plan, context);
+
+        Assert.True(result.Success, result.Error);
+        var record = Assert.Single(context.Records);
+        Assert.Equal("coding-local", record.LlmProfile);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ToolStep_RecordsAnalyzedTargets()
+    {
+        var services = new ExecutionRuntimeServices
+        {
+            Tools = new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["targeted"] = new TargetedTool()
+            },
+            PolicyEngine = new AllowAllPolicyEngine(),
+            Options = new ExecutionOptions
+            {
+                CollectMetrics = false,
+                GenerateJobSummary = false
+            }
+        };
+
+        var plan = new ExecutionPlan
+        {
+            Name = "target-record",
+            Steps =
+            [
+                new ExecutionStep
+                {
+                    Id = "tool-step",
+                    Type = "tool",
+                    Target = "targeted",
+                    Inputs = new Dictionary<string, object?>
+                    {
+                        ["input"] = "C:/temp/aiomux/file.txt"
+                    }
+                }
+            ]
+        };
+
+        var context = new ExecutionContext { Services = services };
+
+        var runtime = new ExecutionRuntime();
+        var result = await runtime.ExecuteAsync(plan, context);
+
+        Assert.True(result.Success, result.Error);
+        var record = Assert.Single(context.Records);
+        var target = Assert.Single(record.ToolTargets);
+        Assert.Equal(ToolTargetKind.FilePath, target.Kind);
+        Assert.Equal("C:/temp/aiomux/file.txt", target.Value);
+    }
+
     private static string Sha256(string value)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(hash);
     }
 
-    private sealed class UppercaseTool : ITool
+    private sealed class UppercaseTool : DispatchableToolBase
     {
-        public string Name => "upper";
-        public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
-        public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
-        public Task<string> ExecuteAsync(string input) => Task.FromResult(input.ToUpperInvariant());
+        public override string Name => "upper";
+        public override IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+        public override ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
+        protected override Task<string> InvokeCoreAsync(string input) => Task.FromResult(input.ToUpperInvariant());
     }
 
-    private sealed class ThrowIfCalledTool : ITool
+    private sealed class ThrowIfCalledTool : DispatchableToolBase
     {
-        public string Name => "lookup";
+        public override string Name => "lookup";
         public bool WasCalled { get; private set; }
-        public IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
-        public ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
-        public Task<string> ExecuteAsync(string input)
+        public override IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+        public override ToolExecutionAnalysis Analyze(string input) => ToolExecutionAnalysis.Recognized(ToolOperation.Read);
+        protected override Task<string> InvokeCoreAsync(string input)
         {
             WasCalled = true;
             throw new InvalidOperationException("Tool should not be called while in replay mode");
@@ -184,7 +288,45 @@ public sealed class ExecutionRuntimeIntegrationTests
 
     private sealed class DenyAllPolicyEngine(string reason, string hash) : IPolicyEngine
     {
+        public string PolicyType => "denyall";
         public PolicyDecision Evaluate(ToolCall call, ToolExecutionAnalysis analysis, AgentContext context)
             => PolicyDecision.Deny(reason, hash);
+    }
+
+    private sealed class TargetedTool : DispatchableToolBase
+    {
+        public override string Name => "targeted";
+        public override IReadOnlyCollection<ToolOperation> SupportedOperations { get; } = [ToolOperation.Read];
+        public override ToolExecutionAnalysis Analyze(string input) =>
+            ToolExecutionAnalysis.Recognized([ToolOperation.Read], [new ToolTarget(ToolTargetKind.FilePath, input)]);
+        protected override Task<string> InvokeCoreAsync(string input) => Task.FromResult("ok");
+    }
+
+    private sealed class PreferredProfileAgent : IAgent
+    {
+        public string Name => "preferred";
+
+        public AgentMetadata Metadata => new()
+        {
+            Name = Name,
+            Description = "test",
+            PreferredLlmProfile = "coding-local"
+        };
+
+        public Task<StepExecutionResult> ExecuteAsync(
+            ImmutableDictionary<string, object?> inputs,
+            ExecutionContext context,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new StepExecutionResult { Success = true, Output = "ok" });
+    }
+
+    private sealed class FakeLlmClient(string provider, string model) : ILLMClient
+    {
+        public string Provider => provider;
+        public string Model => model;
+        public Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
+            => Task.FromResult(prompt);
+        public Task<string> CompleteAsync(string userInput, string systemPrompt, CancellationToken cancellationToken = default)
+            => Task.FromResult(userInput);
     }
 }

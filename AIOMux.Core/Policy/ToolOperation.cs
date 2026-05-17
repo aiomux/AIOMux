@@ -19,8 +19,20 @@ public enum ToolOperation
     /// <summary>Opens outbound or inbound network connections.</summary>
     Network,
 
+    /// <summary>Issues an HTTP POST request to a remote endpoint.</summary>
+    HttpPost,
+
     /// <summary>Spawns or controls external OS processes.</summary>
     Process,
+
+    /// <summary>Starts a new OS process.</summary>
+    ProcessStart,
+
+    /// <summary>Terminates a running OS process.</summary>
+    ProcessKill,
+
+    /// <summary>Executes a shell or CLI command.</summary>
+    CommandExecute,
 
     /// <summary>Reads credentials, tokens, API keys, or other secrets.</summary>
     SecretRead,
@@ -29,5 +41,14 @@ public enum ToolOperation
     DbRead,
 
     /// <summary>Inserts, updates, or deletes rows or records in a database.</summary>
-    DbWrite
+    DbWrite,
+
+    /// <summary>Writes a value to the system registry.</summary>
+    RegistryWrite,
+
+    /// <summary>Stops a running system service.</summary>
+    ServiceStop,
+
+    /// <summary>Restarts a system service.</summary>
+    ServiceRestart
 }

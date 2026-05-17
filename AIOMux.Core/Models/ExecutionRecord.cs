@@ -32,6 +32,11 @@ public sealed class ExecutionRecord
     public string Target { get; set; } = string.Empty;
 
     /// <summary>
+    /// Selected LLM profile name for agent execution, when applicable.
+    /// </summary>
+    public string? LlmProfile { get; set; }
+
+    /// <summary>
     /// Input provided to the step.
     /// </summary>
     public object? Input { get; set; }
@@ -61,6 +66,16 @@ public sealed class ExecutionRecord
     /// Error captured for a failed or denied step.
     /// </summary>
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Tool targets analyzed for this execution step, if applicable.
+    /// </summary>
+    public List<ToolTarget> ToolTargets { get; set; } = [];
+
+    /// <summary>
+    /// Policy engine type that evaluated this step (for example: "allowall", "tooldenylist").
+    /// </summary>
+    public string? PolicyType { get; set; }
 
     /// <summary>
     /// Reason for policy denial, if applicable. Null if step was not policy-denied.

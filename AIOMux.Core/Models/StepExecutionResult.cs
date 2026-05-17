@@ -9,6 +9,9 @@ public sealed record StepExecutionResult
     /// <summary>Whether the step completed successfully.</summary>
     public bool Success { get; init; }
 
+    /// <summary>Tool targets analyzed for this step, if applicable.</summary>
+    public IReadOnlyCollection<ToolTarget> ToolTargets { get; init; } = [];
+
     /// <summary>Primary text output produced by the step.</summary>
     public string Output { get; init; } = string.Empty;
 
@@ -23,4 +26,7 @@ public sealed record StepExecutionResult
 
     /// <summary>Hash of the policy that evaluated this step, for audit trail.</summary>
     public string? PolicyHash { get; init; }
+
+    /// <summary>Type identifier of the policy engine that evaluated this step (for example: "allowall", "tooldenylist").</summary>
+    public string? PolicyType { get; init; }
 }

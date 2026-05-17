@@ -6,7 +6,7 @@ using System.Text;
 namespace AIOMux.Core;
 
 /// <summary>
-/// Manages agent registration, external assembly loading, and retrieval.
+/// Manages agent registration, external package loading, and retrieval.
 /// </summary>
 public class AgentManager : IAgentManager
 {
@@ -74,14 +74,14 @@ public class AgentManager : IAgentManager
     }
 
     /// <summary>
-    /// Loads agents from a single assembly asynchronously.
+    /// Loads agents from a single agent package file asynchronously.
     /// </summary>
-    /// <param name="assemblyPath">Path to the assembly.</param>
-    /// <param name="llmProfiles">Named LLM client profiles. Each agent's preferred profile is
+    /// <param name="assemblyPath">Path to the agent package file.</param>
+    /// <param name="llmClientResolver">Named LLM client resolver. Each agent's preferred profile is
     /// resolved via <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to "default".</param>
     /// <param name="configuration">Optional configuration for the loaded agent(s).</param>
     /// <returns>True if at least one agent was loaded successfully.</returns>
-    public async Task<bool> LoadAgentsFromAssemblyAsync(string assemblyPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
+    public async Task<bool> LoadAgentsFromAssemblyAsync(string assemblyPath, ILLMClientResolver? llmClientResolver = null, Dictionary<string, object>? configuration = null)
     {
         try
         {
@@ -113,7 +113,7 @@ public class AgentManager : IAgentManager
                         continue;
                     }
 
-                    var llmClient = ResolveProfileClient(llmProfiles, prototype.Metadata.PreferredLlmProfile);
+                    var llmClient = ResolveProfileClient(llmClientResolver, prototype.Metadata.PreferredLlmProfile);
 
                     if (!ValidateLlmConstraints(prototype.Metadata, llmClient))
                     {
@@ -156,13 +156,13 @@ public class AgentManager : IAgentManager
     }
 
     /// <summary>
-    /// Loads agents from assemblies in a directory asynchronously.
+    /// Loads agents from package files in a directory asynchronously.
     /// </summary>
-    /// <param name="directoryPath">Directory containing agent assemblies.</param>
-    /// <param name="llmProfiles">Named LLM client profiles passed through to each loaded agent.</param>
+    /// <param name="directoryPath">Directory containing agent package files.</param>
+    /// <param name="llmClientResolver">Named LLM client resolver passed through to each loaded agent.</param>
     /// <param name="configuration">Optional configuration for loaded agents.</param>
-    /// <returns>Number of assemblies with at least one successfully loaded agent.</returns>
-    public async Task<int> LoadAgentsFromDirectoryAsync(string directoryPath, Dictionary<string, ILLMClient>? llmProfiles = null, Dictionary<string, object>? configuration = null)
+    /// <returns>Number of package files with at least one successfully loaded agent.</returns>
+    public async Task<int> LoadAgentsFromDirectoryAsync(string directoryPath, ILLMClientResolver? llmClientResolver = null, Dictionary<string, object>? configuration = null)
     {
         if (!Directory.Exists(directoryPath))
         {
@@ -175,7 +175,7 @@ public class AgentManager : IAgentManager
 
         foreach (var assemblyFile in assemblyFiles)
         {
-            if (await LoadAgentsFromAssemblyAsync(assemblyFile, llmProfiles, configuration))
+            if (await LoadAgentsFromAssemblyAsync(assemblyFile, llmClientResolver, configuration))
                 loadedCount++;
         }
 
@@ -252,21 +252,21 @@ public class AgentManager : IAgentManager
     }
 
     /// <summary>
-    /// Resolves an LLM client from a named profile map.
+    /// Resolves an LLM client from a named profile resolver.
     /// Uses <paramref name="preferredProfile"/> first, then falls back to "default".
-    /// Returns null when no profiles are available.
+    /// Returns null when no resolver is available.
     /// </summary>
-    private static ILLMClient? ResolveProfileClient(Dictionary<string, ILLMClient>? profiles, string? preferredProfile)
+    private static ILLMClient? ResolveProfileClient(ILLMClientResolver? resolver, string? preferredProfile)
     {
-        if (profiles == null || profiles.Count == 0)
+        if (resolver == null)
             return null;
 
         var key = preferredProfile ?? "default";
 
-        if (profiles.TryGetValue(key, out var client))
+        if (resolver.TryResolve(key, out var client))
             return client;
 
-        profiles.TryGetValue("default", out var fallback);
+        resolver.TryResolve("default", out var fallback);
         return fallback;
     }
 }

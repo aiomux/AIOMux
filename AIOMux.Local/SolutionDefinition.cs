@@ -1,4 +1,24 @@
+using System.Text.Json.Serialization;
+
 namespace AIOMux.Local;
+
+/// <summary>
+/// Runtime execution mode for the solution.
+/// Controls whether development-only features such as AllowAll policy are permitted.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ExecutionMode
+{
+    /// <summary>
+    /// Development mode. AllowAll policy is permitted with a warning.
+    /// </summary>
+    Development,
+
+    /// <summary>
+    /// Production mode. AllowAll policy is rejected at startup.
+    /// </summary>
+    Production
+}
 
 /// <summary>
 /// Defines a complete solution that can be executed locally.
@@ -21,6 +41,12 @@ public sealed class SolutionDefinition
     /// Relative to the solution.json file location.
     /// </summary>
     public string Entry { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Execution mode for this solution. Defaults to <see cref="ExecutionMode.Development"/>.
+    /// Set to <see cref="ExecutionMode.Production"/> to reject unsafe configurations such as AllowAll policy.
+    /// </summary>
+    public ExecutionMode Mode { get; set; } = ExecutionMode.Development;
 
     /// <summary>
     /// Path to the policy configuration file. Required for solution execution.
@@ -57,10 +83,26 @@ public sealed class SolutionDefinition
     public Dictionary<string, object?> Metadata { get; set; } = new();
 
     /// <summary>
-    /// Assembly paths to scan for <c>IAgent</c>, <c>ITool</c>, and <c>IConnector</c> implementations.
+    /// Agent package paths to scan for <c>IAgent</c> implementations.
     /// Paths are relative to the solution.json file location.
     /// </summary>
-    public List<string> Assemblies { get; set; } = [];
+    [JsonPropertyName("agents")]
+    public IReadOnlyList<string> Agents { get; set; } = [];
+
+    /// <summary>
+    /// Tool package paths to scan for <c>ITool</c> implementations.
+    /// Paths are relative to the solution.json file location.
+    /// </summary>
+    [JsonPropertyName("tools")]
+    public IReadOnlyList<string> Tools { get; set; } = [];
+
+    /// <summary>
+    /// Connector package DLL paths to scan for <c>IConnector</c> implementations.
+    /// Paths are relative to the solution.json file location.
+    /// Example: <c>../connectors/AIOMux.Connectors.Console.dll</c>.
+    /// </summary>
+    [JsonPropertyName("connectors")]
+    public IReadOnlyList<string> Connectors { get; set; } = [];
 
     /// <summary>
     /// Default entry agent for connector-originated events.
@@ -69,10 +111,11 @@ public sealed class SolutionDefinition
     public string? EntryAgent { get; set; }
 
     /// <summary>
-    /// Connector declarations for this solution.
+    /// Connector runtime declarations for this solution.
     /// Each entry identifies a connector type to instantiate and start in serve mode.
     /// </summary>
-    public List<ConnectorDeclaration> Connectors { get; set; } = [];
+    [JsonPropertyName("connectorConfigurations")]
+    public List<ConnectorDeclaration> ConnectorConfigurations { get; set; } = [];
 
     /// <summary>
     /// Named LLM profiles available to agents in this solution.

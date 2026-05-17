@@ -1,4 +1,3 @@
-using AIOMux.Connectors;
 using AIOMux.Core;
 using AIOMux.Core.Builders;
 using AIOMux.Core.Interfaces;
@@ -38,7 +37,7 @@ public sealed class SolutionValidator
 
     private static void ValidateUniqueConnectorNames(SolutionDefinition solution)
     {
-        var duplicates = solution.Connectors
+        var duplicates = solution.ConnectorConfigurations
             .GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .Where(g => !string.IsNullOrWhiteSpace(g.Key) && g.Count() > 1)
             .Select(g => g.Key)
@@ -53,16 +52,14 @@ public sealed class SolutionValidator
 
     private static void ValidateConnectorTypes(SolutionDefinition solution)
     {
-        foreach (var connector in solution.Connectors)
+        var availableConnectorTypes = DiscoverExtensionConnectorTypes(solution.Connectors);
+
+        foreach (var connector in solution.ConnectorConfigurations)
         {
-            try
-            {
-                _ = BuiltInConnectorRegistry.ResolveType(connector.Type);
-            }
-            catch (Exception ex)
+            if (!availableConnectorTypes.Contains(connector.Type))
             {
                 throw new InvalidOperationException(
-                    $"Connector '{connector.Name}' declares unknown type '{connector.Type}': {ex.Message}", ex);
+                    $"Connector '{connector.Name}' declares unknown type '{connector.Type}'. Declare the connector DLL in the 'connectors' list and ensure it exposes an IConnector named '{connector.Type}'.");
             }
         }
     }
@@ -102,7 +99,7 @@ public sealed class SolutionValidator
         if (!string.IsNullOrWhiteSpace(solution.EntryAgent))
             agentNames.Add(solution.EntryAgent);
 
-        var extensionAgentNames = DiscoverExtensionAgentNames(solution.Assemblies);
+        var extensionAgentNames = DiscoverExtensionAgentNames(solution.Agents);
 
         foreach (var agentName in agentNames.Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -147,6 +144,73 @@ public sealed class SolutionValidator
                 catch
                 {
                     // Ignore non-instantiable agent types during validation discovery.
+                }
+            }
+        }
+
+        return names;
+    }
+
+    private static HashSet<string> DiscoverExtensionConnectorTypes(IEnumerable<string> assemblyPaths)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var assemblyPath in assemblyPaths)
+        {
+            Assembly assembly;
+            try
+            {
+                assembly = Assembly.LoadFrom(assemblyPath);
+            }
+            catch
+            {
+                continue;
+            }
+
+            var hasAgent = assembly.GetTypes().Any(t => t.IsClass && !t.IsAbstract && typeof(IAgent).IsAssignableFrom(t));
+            if (hasAgent)
+            {
+                throw new InvalidOperationException(
+                    $"Connector package '{assemblyPath}' contains agent implementations, which is not allowed.");
+            }
+
+            var hasTool = assembly.GetTypes().Any(t => t.IsClass && !t.IsAbstract && typeof(ITool).IsAssignableFrom(t));
+            if (hasTool)
+            {
+                throw new InvalidOperationException(
+                    $"Connector package '{assemblyPath}' contains tool implementations, which is not allowed.");
+            }
+
+            var connectorTypes = assembly.GetTypes()
+                .Where(t => t.IsClass && !t.IsAbstract && typeof(IConnector).IsAssignableFrom(t))
+                .ToList();
+
+            if (connectorTypes.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Connector package '{assemblyPath}' does not contain any connector implementations.");
+            }
+
+            foreach (var type in connectorTypes)
+            {
+                try
+                {
+                    if (Activator.CreateInstance(type) is IConnector connector && !string.IsNullOrWhiteSpace(connector.Name))
+                    {
+                        if (!names.Add(connector.Name))
+                        {
+                            throw new InvalidOperationException(
+                                $"Duplicate connector type '{connector.Name}' discovered while scanning connector packages.");
+                        }
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Ignore non-instantiable connector types during validation discovery.
                 }
             }
         }

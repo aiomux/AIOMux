@@ -20,6 +20,8 @@ public sealed class ToolDenyListPolicyEngine : IPolicyEngine
         _policyHash = policyHash;
     }
 
+    public string PolicyType => "tooldenylist";
+
     public PolicyDecision Evaluate(ToolCall call, ToolExecutionAnalysis analysis, AgentContext context)
     {
         if (_deniedTools.Contains(call.ToolName))

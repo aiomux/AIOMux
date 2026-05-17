@@ -6,6 +6,7 @@ namespace AIOMux.Core.Interfaces;
 /// <summary>
 /// Contract for tools that can be used by agents to perform specific tasks.
 /// Execution is intentionally not exposed here and is only available through the dispatcher path.
+/// Tools do not self-authorize; policy evaluation is required before dispatch.
 /// </summary>
 public interface ITool
 {

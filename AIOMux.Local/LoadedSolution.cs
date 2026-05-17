@@ -5,7 +5,7 @@ namespace AIOMux.Local;
 
 /// <summary>
 /// Represents a fully loaded solution: a resolved execution plan, configured runtime services,
-/// and any connectors discovered from the solution's declared assemblies.
+/// and any connectors discovered from the solution's declared connector packages.
 /// </summary>
 public sealed class LoadedSolution
 {

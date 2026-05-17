@@ -80,6 +80,8 @@ public sealed class ToolDispatcher
             ? tool.Analyze(input)
             : ToolExecutionAnalysis.Unrecognized($"Tool not found: {toolName}");
 
+        var analyzedTargets = analysis.Targets.ToList();
+
         var toolCall = new ToolCall { ToolName = toolName, Input = input };
         var decision = _policy.Evaluate(toolCall, analysis, agentContext);
 
@@ -88,6 +90,7 @@ public sealed class ToolDispatcher
             CallId = callId,
             ToolName = toolName,
             RequestedOperations = analysis.RequestedOperations,
+            Targets = analyzedTargets,
             IsRecognized = analysis.IsRecognized,
             Allowed = decision.Allowed,
             Reason = decision.DenyReason,
@@ -103,9 +106,11 @@ public sealed class ToolDispatcher
             return new ToolDispatchResult
             {
                 ToolResult = new ToolResult { CallId = callId, Success = false, Error = decision.DenyReason },
+                Targets = analyzedTargets,
                 PolicyDenied = true,
                 PolicyDenyReason = decision.DenyReason,
                 PolicyHash = decision.PolicyHash,
+                PolicyType = _policy.PolicyType,
                 Events = events
             };
         }
@@ -116,14 +121,16 @@ public sealed class ToolDispatcher
             return new ToolDispatchResult
             {
                 ToolResult = new ToolResult { CallId = callId, Success = false, Error = reason },
+                Targets = analyzedTargets,
                 PolicyDenied = true,
                 PolicyDenyReason = reason,
                 PolicyHash = decision.PolicyHash,
+                PolicyType = _policy.PolicyType,
                 Events = events
             };
         }
 
-        // Replay path after policy approval: skip execution but keep policy evaluation mandatory.
+        // Replay path
         if (isReplayed)
         {
             var replayToolResult = new ToolResult
@@ -147,7 +154,9 @@ public sealed class ToolDispatcher
             return new ToolDispatchResult
             {
                 ToolResult = replayToolResult,
+                Targets = analyzedTargets,
                 PolicyHash = decision.PolicyHash,
+                PolicyType = _policy.PolicyType,
                 Events = events
             };
         }
@@ -190,7 +199,9 @@ public sealed class ToolDispatcher
         return new ToolDispatchResult
         {
             ToolResult = toolResult,
+            Targets = analyzedTargets,
             PolicyHash = decision.PolicyHash,
+            PolicyType = _policy.PolicyType,
             Events = events
         };
     }

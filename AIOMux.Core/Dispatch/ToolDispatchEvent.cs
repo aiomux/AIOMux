@@ -46,6 +46,11 @@ public sealed class PolicyEvaluatedEvent : ToolDispatchEvent
     /// </summary>
     public IReadOnlyCollection<ToolOperation> RequestedOperations { get; init; } = [];
 
+    /// <summary>
+    /// Targets the tool reported it would access for this specific input.
+    /// </summary>
+    public IReadOnlyCollection<Models.ToolTarget> Targets { get; init; } = [];
+
     /// <summary>False when <c>ITool.Analyze</c> could not classify the input.</summary>
     public bool IsRecognized { get; init; }
 

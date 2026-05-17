@@ -20,6 +20,11 @@ public interface IPolicyEngine
     /// <param name="context">Minimal execution context for the current run.</param>
     /// <returns>A <see cref="PolicyDecision"/> indicating allow or deny with reason.</returns>
     PolicyDecision Evaluate(ToolCall call, ToolExecutionAnalysis analysis, AgentContext context);
+
+    /// <summary>
+    /// Identifies the policy engine type for audit trail records (for example: "allowall", "tooldenylist").
+    /// </summary>
+    string PolicyType { get; }
 }
 
 

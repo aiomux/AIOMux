@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace AIOMux.Local;
 
@@ -35,6 +36,8 @@ public class SolutionLoader
         try
         {
             var json = File.ReadAllText(_solutionPath);
+            RejectLegacyAssemblyFields(json);
+
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var definition = JsonSerializer.Deserialize<SolutionDefinition>(json, options)
                 ?? throw new InvalidOperationException("Failed to deserialize solution definition");
@@ -68,6 +71,21 @@ public class SolutionLoader
             throw new InvalidOperationException("Solution must specify a policyConfig path");
     }
 
+    private static void RejectLegacyAssemblyFields(string json)
+    {
+        var node = JsonNode.Parse(json) as JsonObject;
+        if (node == null)
+            return;
+
+        var legacyFields = new[] { "assemblies", "agentAssemblies", "toolAssemblies", "connectorAssemblies" };
+        var present = legacyFields.Where(name => node.ContainsKey(name)).ToList();
+        if (present.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Legacy manifest fields are not supported: {string.Join(", ", present)}. Use 'agents', 'tools', and 'connectors'.");
+        }
+    }
+
     /// <summary>
     /// Resolves relative paths in the solution definition to absolute paths.
     /// </summary>
@@ -98,12 +116,29 @@ public class SolutionLoader
                 definition.Replay.StoragePath = Path.Combine(_solutionDirectory, definition.Replay.StoragePath);
         }
 
-        // Resolve assembly paths.
-        for (int i = 0; i < definition.Assemblies.Count; i++)
+        // Resolve capability package paths.
+        definition.Agents = ResolvePathList(definition.Agents);
+        definition.Tools = ResolvePathList(definition.Tools);
+        definition.Connectors = ResolvePathList(definition.Connectors);
+    }
+
+    private IReadOnlyList<string> ResolvePathList(IReadOnlyList<string> values)
+    {
+        if (values.Count == 0)
+            return values;
+
+        var result = new List<string>(values.Count);
+        foreach (var value in values)
         {
-            if (!Path.IsPathRooted(definition.Assemblies[i]))
-                definition.Assemblies[i] = Path.Combine(_solutionDirectory, definition.Assemblies[i]);
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException("Capability path values cannot be null or empty.");
+
+            result.Add(Path.IsPathRooted(value)
+                ? value
+                : Path.Combine(_solutionDirectory, value));
         }
+
+        return result;
     }
 
     /// <summary>
@@ -120,10 +155,17 @@ public class SolutionLoader
         if (!string.IsNullOrWhiteSpace(definition.MemoryConfig) && !File.Exists(definition.MemoryConfig))
             throw new FileNotFoundException($"Memory config file not found: {definition.MemoryConfig}");
 
-        foreach (var assemblyPath in definition.Assemblies)
+        ValidatePathListExists(definition.Agents, "agent");
+        ValidatePathListExists(definition.Tools, "tool");
+        ValidatePathListExists(definition.Connectors, "connector");
+    }
+
+    private static void ValidatePathListExists(IReadOnlyList<string> paths, string category)
+    {
+        foreach (var path in paths)
         {
-            if (!File.Exists(assemblyPath))
-                throw new FileNotFoundException($"Assembly not found: {assemblyPath}");
+            if (!File.Exists(path))
+                throw new FileNotFoundException($"{category} package not found: {path}");
         }
     }
 }

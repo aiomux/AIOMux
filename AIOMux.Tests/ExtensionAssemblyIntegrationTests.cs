@@ -12,7 +12,7 @@ namespace AIOMux.Tests;
 public sealed class ExtensionAssemblyIntegrationTests
 {
     [Fact]
-    public async Task RunAsync_WithAssemblyProvidedTool_ExecutesToolStep()
+    public async Task RunAsync_WithToolPackageContainingAgent_ThrowsRoleValidationError()
     {
         var solutionDirectory = CreateTempDirectory();
 
@@ -49,7 +49,9 @@ public sealed class ExtensionAssemblyIntegrationTests
                 name = "assembly-tool-solution",
                 entry = "plan.json",
                 policyConfig = "policy.json",
-                assemblies = new[] { assemblyPath },
+                agents = Array.Empty<string>(),
+                tools = new[] { assemblyPath },
+                connectors = Array.Empty<string>(),
                 executionOptions = new
                 {
                     collectMetrics = false,
@@ -58,16 +60,11 @@ public sealed class ExtensionAssemblyIntegrationTests
                 }
             });
 
-            var validator = new SolutionValidator();
-            await validator.ValidateAsync(solutionPath);
-
             var runner = new SolutionRunner();
-            var summary = await runner.RunAsync(solutionPath, "hello from assembly tool");
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.RunAsync(solutionPath, "hello from assembly tool"));
 
-            Assert.True(summary.Success, summary.Error);
-            Assert.Equal("HELLO FROM ASSEMBLY TOOL", summary.Output);
-            Assert.Equal(1, summary.ExecutedSteps);
-            Assert.NotNull(summary.RunId);
+            Assert.Contains("Tool package", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("agent implementations", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -76,7 +73,7 @@ public sealed class ExtensionAssemblyIntegrationTests
     }
 
     [Fact]
-    public async Task LoadAsync_WithAssemblyProvidedAgent_RegistersAgentAndRuntimeExecutesPlan()
+    public async Task LoadAsync_WithAgentPackageContainingTool_ThrowsRoleValidationError()
     {
         var solutionDirectory = CreateTempDirectory();
 
@@ -113,7 +110,9 @@ public sealed class ExtensionAssemblyIntegrationTests
                 name = "assembly-agent-solution",
                 entry = "plan.json",
                 policyConfig = "policy.json",
-                assemblies = new[] { assemblyPath },
+                agents = new[] { assemblyPath },
+                tools = Array.Empty<string>(),
+                connectors = Array.Empty<string>(),
                 executionOptions = new
                 {
                     collectMetrics = false,
@@ -123,24 +122,10 @@ public sealed class ExtensionAssemblyIntegrationTests
             });
 
             var runner = new SolutionRunner();
-            var loaded = await runner.LoadAsync(solutionPath);
-            var agent = loaded.Services.AgentManager?.GetByName("assembly-prefix");
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => runner.LoadAsync(solutionPath));
 
-            Assert.NotNull(agent);
-
-            var context = new ExecutionContext
-            {
-                Services = loaded.Services,
-                WorkingDirectory = loaded.WorkingDirectory
-            };
-            context.Inputs["input"] = "hello from assembly agent";
-
-            var runtime = new ExecutionRuntime();
-            var result = await runtime.ExecuteAsync(loaded.Plan, context);
-
-            Assert.True(result.Success, result.Error);
-            Assert.Equal("[ASSEMBLY-PREFIX] hello from assembly agent", result.Output);
-            Assert.Equal("[ASSEMBLY-PREFIX] hello from assembly agent", context.State["agentOutput"]);
+            Assert.Contains("Agent package", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("tool implementations", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

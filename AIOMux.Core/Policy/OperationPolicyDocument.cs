@@ -13,9 +13,13 @@ namespace AIOMux.Core.Policy;
 /// {
 ///   "version": "1",
 ///   "tools": {
-///     "file":  { "allowedOperations": ["Read", "Write"] },
-///     "shell": { "allowedOperations": ["Read"] },
-///     "http":  { "allowedOperations": ["Network"] }
+///     "file":
+///     {
+///       "allowedOperations": ["Read", "Write"],
+///       "constraints": {
+///         "Read": { "allowedPaths": ["C:/apps/logs"] }
+///       }
+///     }
 ///   }
 /// }
 /// </code>
@@ -27,6 +31,26 @@ namespace AIOMux.Core.Policy;
 /// </summary>
 public sealed class OperationPolicyDocument
 {
+    /// <summary>
+    /// Materialized runtime policy entries including operations and optional constraints.
+    /// </summary>
+    public IReadOnlyDictionary<string, ToolPolicyDefinition> ToPolicyDefinitions()
+    {
+        var result = new Dictionary<string, ToolPolicyDefinition>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (toolName, entry) in Tools)
+        {
+            var constraints = entry.Constraints == null
+                ? new Dictionary<ToolOperation, ToolPolicyConstraints>()
+                : new Dictionary<ToolOperation, ToolPolicyConstraints>(entry.Constraints);
+
+            result[toolName] = new ToolPolicyDefinition(
+                entry.AllowedOperations ?? [],
+                constraints);
+        }
+
+        return result;
+    }
+
     private static readonly JsonSerializerOptions DeserializeOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -100,4 +124,17 @@ public sealed class ToolPolicyEntry
     /// </summary>
     [JsonPropertyName("allowedOperations")]
     public IReadOnlyCollection<ToolOperation>? AllowedOperations { get; init; }
+
+    /// <summary>
+    /// Optional per-operation target constraints.
+    /// </summary>
+    [JsonPropertyName("constraints")]
+    public Dictionary<ToolOperation, ToolPolicyConstraints>? Constraints { get; init; }
 }
+
+/// <summary>
+/// Runtime policy definition for a single tool.
+/// </summary>
+public sealed record ToolPolicyDefinition(
+    IReadOnlyCollection<ToolOperation> AllowedOperations,
+    IReadOnlyDictionary<ToolOperation, ToolPolicyConstraints> Constraints);

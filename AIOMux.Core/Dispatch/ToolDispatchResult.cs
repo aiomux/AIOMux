@@ -15,6 +15,11 @@ public sealed class ToolDispatchResult
     /// </summary>
     public ToolResult ToolResult { get; init; } = new();
 
+    /// <summary>
+    /// Tool targets analyzed for this invocation.
+    /// </summary>
+    public IReadOnlyList<ToolTarget> Targets { get; init; } = [];
+
     /// <summary>True when the invocation was blocked by the policy engine.</summary>
     public bool PolicyDenied { get; init; }
 
@@ -23,6 +28,9 @@ public sealed class ToolDispatchResult
 
     /// <summary>Policy hash from the evaluation decision. Empty when not applicable.</summary>
     public string PolicyHash { get; init; } = string.Empty;
+
+    /// <summary>Policy engine type that evaluated this invocation (for example: "allowall", "tooldenylist").</summary>
+    public string? PolicyType { get; init; }
 
     /// <summary>
     /// Ordered events emitted during this dispatch cycle.
