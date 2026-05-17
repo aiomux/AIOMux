@@ -364,7 +364,6 @@ public class ExecutionRuntime : IExecutionRuntime
 
         var agents = services.AgentManager
             .GetAllAgents()
-            .Where(a => !a.Name.Equals("PlannerAgent", StringComparison.OrdinalIgnoreCase))
             .Select(a => a.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();

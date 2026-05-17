@@ -498,20 +498,9 @@ public class SolutionRunner
     {
         foreach (var agent in ScanAssemblyFor<IAgent>(typeof(IAgent).Assembly, _logger))
         {
-            if (agent is PlannerAgent)
-                continue;
-
             services.AgentManager?.Register(agent);
             _logger?.LogInformation("Discovered built-in agent '{Name}'", agent.Name);
         }
-
-        llmClientResolver.TryResolve("default", out var defaultLlmClient);
-        services.AgentManager?.Register(new PlannerAgent(defaultLlmClient));
-        _logger?.LogInformation(
-            defaultLlmClient == null
-                ? "Registered PlannerAgent in fallback mode (no default LLM profile configured)."
-                : "Registered PlannerAgent with model '{Model}' from default LLM profile.",
-            defaultLlmClient?.Model);
 
         foreach (var tool in ScanAssemblyFor<ITool>(typeof(ITool).Assembly, _logger))
         {

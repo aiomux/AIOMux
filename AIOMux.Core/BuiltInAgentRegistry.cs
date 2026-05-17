@@ -4,7 +4,8 @@ namespace AIOMux.Core;
 
 /// <summary>
 /// Resolves built-in agent implementations by logical agent name.
-/// This is the narrow seam where externally loaded agent descriptors can be merged later.
+/// Core ships built-in utility agents (echo, gauntlet) only.
+/// Planning agents belong to solution packs and are registered externally.
 /// </summary>
 public static class BuiltInAgentRegistry
 {
@@ -12,8 +13,7 @@ public static class BuiltInAgentRegistry
         new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
         {
             ["echo"] = typeof(EchoAgent),
-            ["gauntlet"] = typeof(GauntletAgent),
-            ["PlannerAgent"] = typeof(PlannerAgent)
+            ["gauntlet"] = typeof(GauntletAgent)
         };
 
     public static Type ResolveType(

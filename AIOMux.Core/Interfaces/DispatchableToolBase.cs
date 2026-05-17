@@ -12,6 +12,8 @@ public abstract class DispatchableToolBase : ITool
 {
     public abstract string Name { get; }
 
+    public virtual ToolDescriptor Descriptor => ToolDescriptorFactory.CreateFallback(Name, SupportedOperations);
+
     public abstract IReadOnlyCollection<ToolOperation> SupportedOperations { get; }
 
     public abstract ToolExecutionAnalysis Analyze(string input);

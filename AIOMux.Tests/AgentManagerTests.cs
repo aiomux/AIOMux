@@ -9,29 +9,30 @@ namespace AIOMux.Tests;
 public sealed class AgentManagerTests
 {
     [Fact]
-    public void GetFormattedAgentList_ExcludesPlannerAgents()
+    public void GetFormattedAgentList_ReturnsAllRegisteredAgents()
     {
         var manager = new AgentManager();
         manager.Register(new EchoAgent());
-        manager.Register(new PlannerNamedAgent());
+        manager.Register(new UtilityAgent());
 
         var output = manager.GetFormattedAgentList();
 
         Assert.Contains("echo", output, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("planner", output, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("utility", output, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void GetAvailableAgents_ExcludesPlannerAgents()
+    public void GetAvailableAgents_ReturnsAllRegisteredAgents()
     {
         var manager = new AgentManager();
         manager.Register(new EchoAgent());
-        manager.Register(new PlannerNamedAgent());
+        manager.Register(new UtilityAgent());
 
         var available = manager.GetAvailableAgents().ToList();
 
-        Assert.Single(available);
-        Assert.Equal("echo", available[0].Name);
+        Assert.Equal(2, available.Count);
+        Assert.Contains(available, a => a.Name.Equals("echo", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(available, a => a.Name.Equals("utility", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -44,11 +45,13 @@ public sealed class AgentManagerTests
         Assert.False(loaded);
     }
 
-    private sealed class PlannerNamedAgent : IAgent
+    private sealed class UtilityAgent : IAgent
     {
-        public string Name => "PlannerAnything";
+        public string Name => "utility";
 
-        public string Description => "planner-like";
+        public string Description => "A generic utility agent for testing.";
+
+        public AgentMetadata Metadata => new();
 
         public Task<StepExecutionResult> ExecuteAsync(
             ImmutableDictionary<string, object?> inputs,

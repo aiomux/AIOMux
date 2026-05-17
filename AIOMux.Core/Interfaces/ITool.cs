@@ -16,6 +16,12 @@ public interface ITool
     string Name { get; }
 
     /// <summary>
+    /// Structured metadata describing this tool for planning, docs, and UI scenarios.
+    /// Descriptor metadata does not authorize execution and does not bypass policy.
+    /// </summary>
+    ToolDescriptor Descriptor { get; }
+
+    /// <summary>
     /// The complete set of operations this tool can ever perform across all invocations.
     /// Used by policy engines to pre-screen tool registration or plan loading.
     /// </summary>

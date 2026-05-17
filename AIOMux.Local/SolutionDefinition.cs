@@ -186,7 +186,7 @@ public sealed class ConnectorDeclaration
 }
 
 /// <summary>
-/// Optional language model configuration for planner and agent LLM usage.
+/// Optional language model configuration for agent LLM usage.
 /// </summary>
 public sealed class LlmConfiguration
 {

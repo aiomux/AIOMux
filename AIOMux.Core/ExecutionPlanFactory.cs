@@ -6,33 +6,34 @@ namespace AIOMux.Core;
 
 /// <summary>
 /// Convenience factory for creating execution plans via builders.
-/// Provides fluent API entry points for all plan sources.
+/// Core executes validated plans. Planning decisions belong to agents outside Core.
 /// </summary>
 public static class ExecutionPlanFactory
 {
     /// <summary>
-    /// Creates a plan from JSON content (static plan).
+    /// Creates a plan from JSON content.
     /// </summary>
-    /// <param name="json">JSON definition of the plan</param>
-    /// <param name="planName">Optional name to override JSON plan name</param>
-    /// <returns>Builder ready to call BuildAsync</returns>
+    /// <param name="json">JSON definition of the plan.</param>
+    /// <param name="planName">Optional name to override JSON plan name.</param>
+    /// <returns>Builder ready to call BuildAsync.</returns>
     public static IExecutionPlanBuilder FromJson(string json, string? planName = null)
         => new JsonExecutionPlanBuilder(json, planName);
 
     /// <summary>
-    /// Creates a plan builder for generated/dynamic plans.
+    /// Creates a builder for programmatically assembling a plan at runtime.
+    /// Use in agents or solution packs, not in Core runtime components.
     /// </summary>
-    /// <param name="planName">Name of the generated plan</param>
-    /// <returns>Builder with fluent methods to add steps</returns>
-    public static PlannerExecutionPlanBuilder Create(string planName)
-        => new PlannerExecutionPlanBuilder(planName);
+    /// <param name="planName">Name of the assembled plan.</param>
+    /// <returns>Builder with fluent methods to add steps.</returns>
+    public static ExecutionPlanBuilder Create(string planName)
+        => new ExecutionPlanBuilder(planName);
 
     /// <summary>
     /// Creates a plan builder for forking an existing run.
     /// </summary>
-    /// <param name="originalPlan">The plan to fork from</param>
-    /// <param name="forkStepIndex">Step index at which to fork reconstruction</param>
-    /// <returns>Builder with fluent methods to add additional steps</returns>
+    /// <param name="originalPlan">The plan to fork from.</param>
+    /// <param name="forkStepIndex">Step index at which to fork reconstruction.</param>
+    /// <returns>Builder with fluent methods to add additional steps.</returns>
     public static ReplayForkPlanBuilder Fork(ExecutionPlan originalPlan, int forkStepIndex = 0)
         => new ReplayForkPlanBuilder(originalPlan, forkStepIndex);
 }

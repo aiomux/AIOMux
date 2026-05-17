@@ -28,6 +28,12 @@ public sealed class ToolDispatcher
     private readonly IReadOnlyDictionary<string, ToolResult> _replayCache;
     private readonly ILogger? _logger;
 
+    /// <summary>
+    /// Read-only metadata catalog for currently registered tools.
+    /// Metadata is informational and is not used for authorization.
+    /// </summary>
+    public IReadOnlyDictionary<string, ToolDescriptor> ToolCatalog { get; }
+
     public ToolDispatcher(
         IReadOnlyDictionary<string, ITool> tools,
         IPolicyEngine policy,
@@ -40,6 +46,11 @@ public sealed class ToolDispatcher
         _replayMode = replayMode;
         _replayCache = replayCache ?? new Dictionary<string, ToolResult>(StringComparer.Ordinal);
         _logger = logger;
+
+        ToolCatalog = tools.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Descriptor ?? ToolDescriptorFactory.CreateFallback(kvp.Value.Name, kvp.Value.SupportedOperations),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

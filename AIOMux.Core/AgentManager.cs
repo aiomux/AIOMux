@@ -53,24 +53,18 @@ public class AgentManager : IAgentManager
         var sb = new StringBuilder();
         foreach (var agent in _agents)
         {
-            // Skip the planner agent because it drives plan generation, not plan steps.
-            if (agent.Name.Contains("Planner", StringComparison.OrdinalIgnoreCase))
-                continue;
-
             sb.AppendLine($"- {agent.Name}");
         }
         return sb.ToString().TrimEnd();
     }
 
     /// <summary>
-    /// Get available agents with their descriptions for use in planning.
+    /// Gets available agents with their descriptions.
     /// </summary>
-    /// <returns>Collection of agents with name and description</returns>
+    /// <returns>Collection of agents with name and description.</returns>
     public IEnumerable<(string Name, string Description)> GetAvailableAgents()
     {
-        return _agents
-            .Where(a => !a.Name.Contains("Planner", StringComparison.OrdinalIgnoreCase))
-            .Select(a => (a.Name, a.Description));
+        return _agents.Select(a => (a.Name, a.Description));
     }
 
     /// <summary>
