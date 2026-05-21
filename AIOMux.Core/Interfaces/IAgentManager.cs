@@ -31,8 +31,9 @@ public interface IAgentManager
 
     /// <summary>
     /// Loads agents from the specified agent package path.
-    /// Each agent's preferred LLM profile is resolved from <paramref name="llmClientResolver"/>
-    /// using <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to the "default" key.
+    /// When a non-null <paramref name="llmClientResolver"/> is provided, validates that all profiles
+    /// listed in <see cref="AgentMetadata.RequiredLlmProfiles"/> exist; throws <see cref="InvalidOperationException"/>
+    /// if any are missing.
     /// </summary>
     /// <param name="assemblyPath">Path to the agent package file.</param>
     /// <param name="llmClientResolver">Named LLM client resolver available to agents.</param>
@@ -42,8 +43,9 @@ public interface IAgentManager
 
     /// <summary>
     /// Loads agents from all matching agent package files in the specified directory.
-    /// Each agent's preferred LLM profile is resolved from <paramref name="llmClientResolver"/>
-    /// using <see cref="AgentMetadata.PreferredLlmProfile"/>, falling back to the "default" key.
+    /// When a non-null <paramref name="llmClientResolver"/> is provided, validates that all profiles
+    /// listed in <see cref="AgentMetadata.RequiredLlmProfiles"/> exist; throws <see cref="InvalidOperationException"/>
+    /// if any are missing.
     /// </summary>
     /// <param name="directoryPath">Directory containing agent package files.</param>
     /// <param name="llmClientResolver">Named LLM client resolver available to agents.</param>

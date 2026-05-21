@@ -99,28 +99,24 @@ public class AgentManager : IAgentManager
 
             foreach (var agentType in agentTypes)
             {
+                if (Activator.CreateInstance(agentType) is not IAgent prototype)
+                {
+                    _logger?.LogError("Failed to create instance of agent type: {AgentType}", agentType.Name);
+                    continue;
+                }
+
+                ValidateRequiredLlmProfiles(prototype.Metadata, llmClientResolver, _logger);
+
                 try
                 {
-                    if (Activator.CreateInstance(agentType) is not IAgent prototype)
+                    var factoryContext = new AgentFactoryContext
                     {
-                        _logger?.LogError("Failed to create instance of agent type: {AgentType}", agentType.Name);
-                        continue;
-                    }
+                        LlmResolver = llmClientResolver,
+                        Configuration = configuration ?? []
+                    };
 
-                    var llmClient = ResolveProfileClient(llmClientResolver, prototype.Metadata.PreferredLlmProfile);
-
-                    if (!ValidateLlmConstraints(prototype.Metadata, llmClient))
-                    {
-                        _logger?.LogError(
-                            "Agent '{AgentName}' requires provider='{Provider}' model='{Model}' but the supplied LLM client does not satisfy these constraints. Load aborted.",
-                            prototype.Metadata.Name,
-                            prototype.Metadata.RequiredLlmProvider ?? "(any)",
-                            prototype.Metadata.RequiredLlmModel ?? "(any)");
-                        continue;
-                    }
-
-                    var agent = prototype.CreateAgent(llmClient, configuration);
-                    var initialized = await agent.InitializeAsync(configuration);
+                    var agent = prototype.CreateAgent(factoryContext);
+                    var initialized = await agent.InitializeAsync(factoryContext.Configuration);
                     if (!initialized)
                     {
                         _logger?.LogError("Agent initialization failed: {AgentType}", agentType.Name);
@@ -141,6 +137,10 @@ public class AgentManager : IAgentManager
             }
 
             return loadedAny;
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -204,63 +204,37 @@ public class AgentManager : IAgentManager
     }
 
     /// <summary>
-    /// Validates that the provided LLM client satisfies the compatibility constraints
-    /// declared in an agent metadata object.
+    /// Validates that all required LLM profiles declared by an agent are available in the resolver.
+    /// When <paramref name="resolver"/> is null and profiles are required, logs a warning but does not fail.
+    /// When <paramref name="resolver"/> is non-null, throws for any missing profile.
+    /// This ensures SolutionRunner-loaded agents (which always pass a non-null resolver) hard-fail on missing profiles,
+    /// while direct AgentManager usage without a resolver only warns.
     /// </summary>
-    /// <param name="metadata">The agent metadata containing optional constraint fields.</param>
-    /// <param name="llmClient">The LLM client that will be injected into the agent.</param>
-    /// <returns>
-    /// True when no constraints are declared or all constraints are satisfied;
-    /// false when constraints are declared but cannot be verified against the client.
-    /// </returns>
-    private static bool ValidateLlmConstraints(AgentMetadata metadata, ILLMClient? llmClient)
+    /// <param name="metadata">Agent metadata containing the required profiles list.</param>
+    /// <param name="resolver">LLM client resolver to validate against.</param>
+    /// <param name="logger">Optional logger for warning messages.</param>
+    /// <exception cref="InvalidOperationException">Thrown when resolver is non-null and a required profile is missing.</exception>
+    internal static void ValidateRequiredLlmProfiles(AgentMetadata metadata, ILLMClientResolver? resolver, ILogger? logger)
     {
-        bool hasProviderConstraint = !string.IsNullOrEmpty(metadata.RequiredLlmProvider);
-        bool hasModelConstraint = !string.IsNullOrEmpty(metadata.RequiredLlmModel);
+        if (metadata.RequiredLlmProfiles.Count == 0)
+            return;
 
-        if (!hasProviderConstraint && !hasModelConstraint)
-            return true;
-
-        if (llmClient == null)
-            return false;
-
-        if (hasProviderConstraint &&
-            !llmClient.Provider.Equals(metadata.RequiredLlmProvider, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        if (hasModelConstraint && !MatchesModelPattern(metadata.RequiredLlmModel!, llmClient.Model))
-            return false;
-
-        return true;
-    }
-
-    /// <summary>
-    /// Matches a model name against a required pattern.
-    /// A trailing <c>*</c> acts as a prefix wildcard; otherwise an exact case-insensitive match is required.
-    /// </summary>
-    private static bool MatchesModelPattern(string required, string actual)
-    {
-        return required.EndsWith('*')
-            ? actual.StartsWith(required[..^1], StringComparison.OrdinalIgnoreCase)
-            : actual.Equals(required, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Resolves an LLM client from a named profile resolver.
-    /// Uses <paramref name="preferredProfile"/> first, then falls back to "default".
-    /// Returns null when no resolver is available.
-    /// </summary>
-    private static ILLMClient? ResolveProfileClient(ILLMClientResolver? resolver, string? preferredProfile)
-    {
         if (resolver == null)
-            return null;
+        {
+            logger?.LogWarning(
+                "Agent '{AgentName}' declares required LLM profiles {Profiles} but no resolver is available. Profiles cannot be validated.",
+                metadata.Name,
+                string.Join(", ", metadata.RequiredLlmProfiles));
+            return;
+        }
 
-        var key = preferredProfile ?? "default";
-
-        if (resolver.TryResolve(key, out var client))
-            return client;
-
-        resolver.TryResolve("default", out var fallback);
-        return fallback;
+        foreach (var profileName in metadata.RequiredLlmProfiles)
+        {
+            if (resolver.TryGet(profileName) == null)
+            {
+                throw new InvalidOperationException(
+                    $"Agent '{metadata.Name}' requires LLM profile '{profileName}' which was not found in the resolver.");
+            }
+        }
     }
 }

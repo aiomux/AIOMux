@@ -72,7 +72,8 @@ public class SolutionRunner
         var plan = await planBuilder.BuildAsync(cancellationToken);
 
         var llmProfiles = BuildLlmProfileMap(solution);
-        var llmClientResolver = new LLMClientResolver(llmProfiles);
+        // Passing a non-null resolver, even with an empty map, ensures RequiredLlmProfiles validation always hard-fails for unsatisfied profiles during solution loading.
+        var llmClientResolver = new LLMClientResolver((IReadOnlyDictionary<string, ILLMClient>)llmProfiles);
 
         var agentManager = _agentManager ?? new AgentManager(_loggerFactory);
         var services = new ExecutionRuntimeServices
@@ -516,7 +517,11 @@ public class SolutionRunner
             ValidateRolePackage(agentPackage, expectedRole: "agent");
 
             if (services.AgentManager != null)
-                await services.AgentManager.LoadAgentsFromAssemblyAsync(agentPackage, llmClientResolver);
+            {
+                var loaded = await services.AgentManager.LoadAgentsFromAssemblyAsync(agentPackage, llmClientResolver);
+                if (!loaded)
+                    throw new InvalidOperationException($"Agent package '{agentPackage}' did not load any agents.");
+            }
         }
 
         foreach (var toolPackage in solution.Tools)

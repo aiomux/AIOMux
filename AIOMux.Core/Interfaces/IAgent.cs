@@ -45,9 +45,8 @@ public interface IAgent
     /// Creates and returns an executable agent instance.
     /// Defaults to returning the current instance.
     /// </summary>
-    /// <param name="llmClient">Optional LLM client resolved by profile.</param>
-    /// <param name="configuration">Optional configuration parameters for the agent.</param>
-    IAgent CreateAgent(ILLMClient? llmClient = null, Dictionary<string, object>? configuration = null) => this;
+    /// <param name="context">Factory context containing LLM resolver and configuration.</param>
+    IAgent CreateAgent(AgentFactoryContext context) => this;
 
     /// <summary>
     /// Initializes the agent with any required setup.

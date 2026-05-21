@@ -12,15 +12,15 @@ public sealed class LLMClientResolver : ILLMClientResolver
     /// <summary>
     /// Creates a resolver from a profile map.
     /// </summary>
-    /// <param name="profiles">Named profile map.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="profiles"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when duplicate profile names are detected.</exception>
-    public LLMClientResolver(IEnumerable<KeyValuePair<string, ILLMClient>> profiles)
+    /// <param name="clients">Named profile map.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="clients"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when duplicate profile names or invalid entries are detected.</exception>
+    public LLMClientResolver(IReadOnlyDictionary<string, ILLMClient> clients)
     {
-        ArgumentNullException.ThrowIfNull(profiles);
+        ArgumentNullException.ThrowIfNull(clients);
 
         _profiles = new Dictionary<string, ILLMClient>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (name, client) in profiles)
+        foreach (var (name, client) in clients)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new InvalidOperationException("Invalid profile config: profile name cannot be empty.");
@@ -34,26 +34,23 @@ public sealed class LLMClientResolver : ILLMClientResolver
     }
 
     /// <inheritdoc />
-    public ILLMClient Resolve(string profileName)
+    public ILLMClient GetRequired(string profileName)
     {
         if (string.IsNullOrWhiteSpace(profileName))
-            throw new InvalidOperationException("Unknown LLM profile ''.");
+            throw new ArgumentException("LLM profile name must be a non-empty, non-whitespace string.", nameof(profileName));
 
-        if (TryResolve(profileName, out var client))
+        if (_profiles.TryGetValue(profileName, out var client))
             return client;
 
-        throw new InvalidOperationException($"Unknown LLM profile '{profileName}'.");
+        throw new InvalidOperationException($"LLM profile '{profileName}' was not found.");
     }
 
     /// <inheritdoc />
-    public bool TryResolve(string profileName, out ILLMClient client)
+    public ILLMClient? TryGet(string profileName)
     {
         if (string.IsNullOrWhiteSpace(profileName))
-        {
-            client = default!;
-            return false;
-        }
+            return null;
 
-        return _profiles.TryGetValue(profileName, out client!);
+        return _profiles.TryGetValue(profileName, out var client) ? client : null;
     }
 }

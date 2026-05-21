@@ -165,11 +165,11 @@ public sealed class ExecutionRuntimeIntegrationTests
         var agentManager = new AgentManager();
         agentManager.Register(agent);
 
-        var resolver = new LLMClientResolver(
-        [
-            new KeyValuePair<string, ILLMClient>("coding-local", new FakeLlmClient("ollama", "qwen2.5-coder")),
-            new KeyValuePair<string, ILLMClient>("default", new FakeLlmClient("ollama", "llama3"))
-        ]);
+        var resolver = new LLMClientResolver(new Dictionary<string, ILLMClient>
+        {
+            ["coding-local"] = new FakeLlmClient("ollama", "qwen2.5-coder"),
+            ["default"] = new FakeLlmClient("ollama", "llama3")
+        });
 
         var services = new ExecutionRuntimeServices
         {

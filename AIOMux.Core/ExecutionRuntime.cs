@@ -347,14 +347,17 @@ public class ExecutionRuntime : IExecutionRuntime
         if (agent == null)
             return null;
 
+#pragma warning disable CS0618
         var preferred = agent.Metadata.PreferredLlmProfile ?? "default";
+#pragma warning restore CS0618
+
         if (services.LlmClientResolver == null)
             return preferred;
 
-        if (services.LlmClientResolver.TryResolve(preferred, out _))
+        if (services.LlmClientResolver.TryGet(preferred) != null)
             return preferred;
 
-        return services.LlmClientResolver.TryResolve("default", out _) ? "default" : null;
+        return services.LlmClientResolver.TryGet("default") != null ? "default" : null;
     }
 
     private static void PublishAvailableAgents(ExecutionRuntimeServices services, ExecutionContext context)

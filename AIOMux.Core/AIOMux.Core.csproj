@@ -23,6 +23,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="AIOMux.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <Folder Include="Tools\" />
 	</ItemGroup>
 

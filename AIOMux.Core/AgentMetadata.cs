@@ -35,6 +35,7 @@ public class AgentMetadata
     /// When set, the runtime enforces that the resolved LLM client uses this provider.
     /// Null means no restriction.
     /// </summary>
+    [Obsolete("Use RequiredLlmProfiles and ILLMClientResolver profile resolution via AgentFactoryContext instead. This property will be removed in a future release.")]
     public string? RequiredLlmProvider { get; set; }
 
     /// <summary>
@@ -43,6 +44,7 @@ public class AgentMetadata
     /// When set, the runtime enforces that the resolved LLM client targets a matching model.
     /// Null means no restriction.
     /// </summary>
+    [Obsolete("Use RequiredLlmProfiles and ILLMClientResolver profile resolution via AgentFactoryContext instead. This property will be removed in a future release.")]
     public string? RequiredLlmModel { get; set; }
 
     /// <summary>
@@ -50,5 +52,13 @@ public class AgentMetadata
     /// When set, the runtime selects this profile by default for this agent.
     /// Falls back to <c>"default"</c> if the key is absent from the solution.
     /// </summary>
+    [Obsolete("Use RequiredLlmProfiles and ILLMClientResolver profile resolution via AgentFactoryContext instead. This property will be removed in a future release.")]
     public string? PreferredLlmProfile { get; set; }
+
+    /// <summary>
+    /// Named LLM profiles required by this agent.
+    /// When non-empty and an <c>ILLMClientResolver</c> is provided, the runtime validates
+    /// that all listed profiles exist before agent creation.
+    /// </summary>
+    public IReadOnlyCollection<string> RequiredLlmProfiles { get; init; } = [];
 }
