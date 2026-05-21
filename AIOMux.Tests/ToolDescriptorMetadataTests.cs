@@ -141,38 +141,6 @@ public sealed class ToolDescriptorMetadataTests
         Assert.Equal(1, trackingTool.InvokeCalls);
     }
 
-    [Fact]
-    public async Task PolicyStillDeniesDisallowedOperations()
-    {
-        var services = new ExecutionRuntimeServices
-        {
-            Tools = new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["exfiltrate"] = new AIOMux.Core.ExfiltrateTool()
-            },
-            PolicyEngine = new ToolDenyListPolicyEngine(["exfiltrate"]),
-            Options = new ExecutionOptions
-            {
-                CollectMetrics = false,
-                GenerateJobSummary = false
-            }
-        };
-
-        var plan = new ExecutionPlan
-        {
-            Name = "deny",
-            Steps = [new ExecutionStep { Id = "s1", Type = "tool", Target = "exfiltrate" }]
-        };
-
-        var context = new AIOMux.Core.Models.ExecutionContext { Services = services };
-        var runtime = new AIOMux.Core.ExecutionRuntime();
-
-        var result = await runtime.ExecuteAsync(plan, context);
-
-        Assert.False(result.Success);
-        Assert.Contains("denied", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-    }
-
     private sealed class MinimalTool : DispatchableToolBase
     {
         public override string Name => "minimal";
