@@ -115,8 +115,7 @@ internal static class ForkReplayHelper
             {
                 CallId = replayKey,
                 Success = true,
-                JsonResult = output,
-                Error = null
+                JsonResult = output
             };
         }
 

@@ -291,7 +291,16 @@ public class ExecutionRuntime : IExecutionRuntime
         }
 
         if (!dispatch.ToolResult.Success)
-            throw new InvalidOperationException(dispatch.ToolResult.Error ?? $"Tool '{step.Target}' failed");
+        {
+            return new StepExecutionResult
+            {
+                Success = false,
+                Error = dispatch.ToolResult.ErrorMessage ?? $"Tool '{step.Target}' failed",
+                PolicyHash = dispatch.PolicyHash,
+                PolicyType = dispatch.PolicyType,
+                ToolTargets = dispatch.Targets
+            };
+        }
 
         return new StepExecutionResult
         {

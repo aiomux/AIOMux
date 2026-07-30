@@ -37,4 +37,9 @@ public interface ITool
     /// A <see cref="ToolExecutionAnalysis"/> describing the requested operations.
     /// </returns>
     ToolExecutionAnalysis Analyze(string input);
+
+    /// <summary>
+    /// Executes the tool for a specific input.
+    /// </summary>
+    Task<ToolResult> InvokeAsync(string input, CancellationToken cancellationToken = default);
 }

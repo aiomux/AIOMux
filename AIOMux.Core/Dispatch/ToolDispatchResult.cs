@@ -13,7 +13,7 @@ public sealed class ToolDispatchResult
     /// The raw tool result. On a policy denial <see cref="ToolResult.Success"/> is false
     /// and <see cref="ToolResult.Error"/> holds the denial reason.
     /// </summary>
-    public ToolResult ToolResult { get; init; } = new();
+    public ToolResult ToolResult { get; init; } = new() { Success = false };
 
     /// <summary>
     /// Tool targets analyzed for this invocation.

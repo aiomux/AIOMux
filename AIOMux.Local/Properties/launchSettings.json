@@ -1,0 +1,20 @@
+{
+  "profiles": {
+    "AIOMuxOperatorDebug": {
+      "commandName": "Project",
+      "commandLineArgs": "run solution.json scrape https://example.com and summarize it",
+      "workingDirectory": "C:\\Users\\adria\\source\\repos\\AIOMux Operator",
+      "environmentVariables": {
+        "AIOMUX_DEBUG_LOGGING": "true"
+      }
+    },
+    "SafeRepoOnboarding": {
+      "commandName": "Project",
+      "commandLineArgs": "run solutions/safe-repo-onboarding/solution.json",
+      "workingDirectory": "$(OutDir)",
+      "environmentVariables": {
+        "AIOMUX_DEBUG_LOGGING": "true"
+      }
+    }
+  }
+}

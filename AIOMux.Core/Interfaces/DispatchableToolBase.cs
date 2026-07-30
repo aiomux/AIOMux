@@ -19,12 +19,13 @@ public abstract class DispatchableToolBase : ITool
     public abstract ToolExecutionAnalysis Analyze(string input);
 
     /// <summary>
-    /// Internal execution entry point reserved for the dispatcher.
+    /// Dispatcher-owned execution entry point.
     /// </summary>
-    internal Task<string> InvokeAsync(string input) => InvokeCoreAsync(input);
+    public Task<ToolResult> InvokeAsync(string input, CancellationToken cancellationToken = default)
+        => InvokeCoreAsync(input, cancellationToken);
 
     /// <summary>
     /// Tool implementation hook for execution logic.
     /// </summary>
-    protected abstract Task<string> InvokeCoreAsync(string input);
+    protected abstract Task<ToolResult> InvokeCoreAsync(string input, CancellationToken cancellationToken = default);
 }

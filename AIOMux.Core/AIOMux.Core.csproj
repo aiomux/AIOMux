@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>AIOMux Core</Title>
-		<Version>0.3.0</Version>
+		<Version>0.4.0</Version>
 		<Authors>Adrian Cantu</Authors>
 		<Company>AIOMux</Company>
 		<Product>AIOMux Core</Product>
@@ -16,6 +16,9 @@
 		<PackAsTool>False</PackAsTool>
 		<PackageTags>AI;Artificial-Intelligence;Agent;Agents;Orchestration;LLM;Large-Language-Model;Plugin;Tools;AI-Orchestration;Agent-Framework;C#;.NET;.NetCore;</PackageTags>
 		<PackageReleaseNotes>minor updates</PackageReleaseNotes>
+		<Copyright>Adrian Cantu</Copyright>
+		<PackageIcon>aiomux.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -28,6 +31,20 @@
 
 	<ItemGroup>
 	  <Folder Include="Tools\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="..\AIOMux.Clients\aiomux.png">
+	    <Pack>True</Pack>
+	    <PackagePath>\</PackagePath>
+	  </None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="README.md">
+	    <Pack>True</Pack>
+	    <PackagePath>\</PackagePath>
+	  </None>
 	</ItemGroup>
 
 </Project>

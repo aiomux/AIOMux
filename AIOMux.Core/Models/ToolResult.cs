@@ -1,28 +1,32 @@
-namespace AIOMux.Core.Models
+namespace AIOMux.Core.Models;
+
+/// <summary>
+/// Represents the structured result of a tool invocation.
+/// </summary>
+public sealed record ToolResult
 {
     /// <summary>
-    /// Represents the result of a tool invocation.
+    /// Unique identifier for the tool call.
     /// </summary>
-    public class ToolResult
-    {
-        /// <summary>
-        /// Unique identifier for the tool call.
-        /// </summary>
-        public string CallId { get; set; } = string.Empty;
+    public string CallId { get; init; } = string.Empty;
 
-        /// <summary>
-        /// Serialized result payload from the tool.
-        /// </summary>
-        public string JsonResult { get; set; } = string.Empty;
+    /// <summary>
+    /// Indicates whether the tool execution succeeded.
+    /// </summary>
+    public required bool Success { get; init; }
 
-        /// <summary>
-        /// Indicates whether the tool execution succeeded.
-        /// </summary>
-        public bool Success { get; set; }
+    /// <summary>
+    /// Serialized successful result payload from the tool.
+    /// </summary>
+    public string? JsonResult { get; init; }
 
-        /// <summary>
-        /// Error message when execution fails.
-        /// </summary>
-        public string? Error { get; set; }
-    }
+    /// <summary>
+    /// Stable error code for failures.
+    /// </summary>
+    public string? ErrorCode { get; init; }
+
+    /// <summary>
+    /// Human-readable error message for failures.
+    /// </summary>
+    public string? ErrorMessage { get; init; }
 }

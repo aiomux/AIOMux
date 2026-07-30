@@ -141,6 +141,17 @@ public class SolutionRunner
                     ctx.Inputs[key] = value;
             }
 
+            var availableOperations = loaded.Services.Tools
+                .ToDictionary(
+                    t => t.Key,
+                    t => t.Value.Descriptor.Operations
+                        .Select(op => op.Name)
+                        .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
+            ctx.Inputs["available_operations"] = availableOperations;
+
             _logger?.LogInformation("Starting execution of plan '{PlanName}' with {StepCount} steps",
                 loaded.Plan.Name, loaded.Plan.Steps.Count);
 
@@ -503,13 +514,15 @@ public class SolutionRunner
             _logger?.LogInformation("Discovered built-in agent '{Name}'", agent.Name);
         }
 
-        foreach (var tool in ScanAssemblyFor<ITool>(typeof(ITool).Assembly, _logger))
+        foreach (var tool in ScanAssemblyForTools(typeof(ITool).Assembly, typeof(ITool).Assembly.Location, llmClientResolver, _logger))
         {
             if (tool is not DispatchableToolBase)
                 throw new InvalidOperationException($"Tool '{tool.Name}' must inherit DispatchableToolBase.");
 
-            services.Tools[tool.Name] = tool;
-            _logger?.LogInformation("Discovered built-in tool '{Name}'", tool.Name);
+            if (!services.Tools.TryAdd(tool.Name, tool))
+                throw new InvalidOperationException($"Duplicate tool ID '{tool.Name}' detected while registering built-in tools.");
+
+            LogRegisteredTool(tool, _logger);
         }
 
         foreach (var agentPackage in solution.Agents)
@@ -528,13 +541,22 @@ public class SolutionRunner
         {
             ValidateRolePackage(toolPackage, expectedRole: "tool");
 
-            foreach (var tool in ScanAssemblyFor<ITool>(toolPackage, _logger))
+            var toolAssembly = Assembly.LoadFrom(toolPackage);
+            var discoveredTools = ScanAssemblyForTools(toolAssembly, toolPackage, llmClientResolver, _logger).ToList();
+            if (discoveredTools.Count == 0 && toolAssembly.GetTypes().Any(t => t.IsClass && !t.IsAbstract && typeof(ITool).IsAssignableFrom(t)))
+            {
+                throw new InvalidOperationException($"Tool package '{toolPackage}' contains ITool implementations but produced zero tool instances.");
+            }
+
+            foreach (var tool in discoveredTools)
             {
                 if (tool is not DispatchableToolBase)
                     throw new InvalidOperationException($"Tool '{tool.Name}' from '{toolPackage}' must inherit DispatchableToolBase.");
 
-                services.Tools[tool.Name] = tool;
-                _logger?.LogInformation("Discovered tool '{Name}' from {Path}", tool.Name, toolPackage);
+                if (!services.Tools.TryAdd(tool.Name, tool))
+                    throw new InvalidOperationException($"Duplicate tool ID '{tool.Name}' detected while registering package '{toolPackage}'.");
+
+                LogRegisteredTool(tool, _logger);
             }
         }
 
@@ -704,6 +726,88 @@ public class SolutionRunner
         }
 
         return ScanAssemblyFor<T>(assembly, logger);
+    }
+
+    private static IEnumerable<ITool> ScanAssemblyForTools(
+        Assembly assembly,
+        string assemblyPath,
+        ILLMClientResolver llmClientResolver,
+        ILogger? logger)
+    {
+        var toolTypes = assembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract && typeof(ITool).IsAssignableFrom(t))
+            .ToList();
+
+        if (toolTypes.Count == 0)
+            return [];
+
+        var results = new List<ITool>();
+        foreach (var toolType in toolTypes)
+        {
+            var tool = ActivateToolInstance(toolType, assemblyPath, llmClientResolver);
+            results.Add(tool);
+            logger?.LogInformation("Discovered tool type '{ToolType}' from {Path}", toolType.FullName, assemblyPath);
+        }
+
+        if (results.Count == 0)
+            throw new InvalidOperationException($"Tool package '{assemblyPath}' contains ITool implementations but produced zero tool instances.");
+
+        return results;
+    }
+
+    private static ITool ActivateToolInstance(Type toolType, string assemblyPath, ILLMClientResolver llmClientResolver)
+    {
+        var parameterlessCtor = toolType.GetConstructor(Type.EmptyTypes);
+        var resolverCtor = toolType.GetConstructor([typeof(ILLMClientResolver)]);
+
+        var supportedSignatures = "ToolType() or ToolType(ILLMClientResolver)";
+
+        if (resolverCtor != null)
+        {
+            try
+            {
+                if (resolverCtor.Invoke([llmClientResolver]) is ITool resolverActivated)
+                    return resolverActivated;
+
+                throw new InvalidOperationException($"Type '{toolType.FullName}' did not create an ITool instance when invoked with ILLMClientResolver.");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Tool activation failed. Assembly: '{assemblyPath}'. Tool type: '{toolType.FullName}'. Supported constructor signatures: {supportedSignatures}.",
+                    ex.InnerException ?? ex);
+            }
+        }
+
+        if (parameterlessCtor != null)
+        {
+            try
+            {
+                if (parameterlessCtor.Invoke([]) is ITool parameterlessActivated)
+                    return parameterlessActivated;
+
+                throw new InvalidOperationException($"Type '{toolType.FullName}' did not create an ITool instance when invoked with parameterless constructor.");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Tool activation failed. Assembly: '{assemblyPath}'. Tool type: '{toolType.FullName}'. Supported constructor signatures: {supportedSignatures}.",
+                    ex.InnerException ?? ex);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Tool activation failed. Assembly: '{assemblyPath}'. Tool type: '{toolType.FullName}'. Supported constructor signatures: {supportedSignatures}. No supported constructor was found.");
+    }
+
+    private static void LogRegisteredTool(ITool tool, ILogger? logger)
+    {
+        logger?.LogInformation("Registered tool: {ToolId}", tool.Name);
+        logger?.LogInformation("Operations:");
+        foreach (var operation in tool.Descriptor.Operations)
+        {
+            logger?.LogInformation("- {Operation}", operation.Name);
+        }
     }
 
     private static void ValidateRolePackage(string packagePath, string expectedRole)

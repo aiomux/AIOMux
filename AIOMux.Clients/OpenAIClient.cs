@@ -1,5 +1,6 @@
 using AIOMux.Core.Configuration;
 using AIOMux.Core.Interfaces;
+using AIOMux.Core.Models;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -62,49 +63,88 @@ public sealed class OpenAIClient : ILLMClient, IDisposable
     public string Model => _model;
 
     /// <inheritdoc/>
-    public Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
+    public Task<LlmResult> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
         => CompleteAsync(prompt, "You are a helpful assistant.", cancellationToken);
 
     /// <inheritdoc/>
-    public async Task<string> CompleteAsync(string userInput, string systemPrompt, CancellationToken cancellationToken = default)
+    public async Task<LlmResult> CompleteAsync(string userInput, string systemPrompt, CancellationToken cancellationToken = default)
     {
         if (!_rateLimiter.TryRequest())
-            return "[RATE LIMIT EXCEEDED] Please wait before making more requests.";
-
-        var requestBody = new
         {
-            model = _model,
-            messages = new object[]
+            return new LlmResult
             {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userInput }
-            }
-        };
-
-        var json = JsonSerializer.Serialize(requestBody);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await _http.PostAsync($"{_baseUrl}/chat/completions", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-            return $"[OPENAI ERROR] {response.StatusCode}";
-
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-        if (doc.RootElement.TryGetProperty("choices", out var choices)
-            && choices.ValueKind == JsonValueKind.Array
-            && choices.GetArrayLength() > 0)
-        {
-            var first = choices[0];
-            if (first.TryGetProperty("message", out var message)
-                && message.TryGetProperty("content", out var contentElement)
-                && contentElement.ValueKind == JsonValueKind.String)
-            {
-                return contentElement.GetString() ?? "[EMPTY]";
-            }
+                Success = false,
+                ErrorCode = "RATE_LIMIT_EXCEEDED",
+                ErrorMessage = "Please wait before making more requests."
+            };
         }
 
-        return "[EMPTY]";
+        try
+        {
+            var requestBody = new
+            {
+                model = _model,
+                messages = new object[]
+                {
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = userInput }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(requestBody);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var response = await _http.PostAsync($"{_baseUrl}/chat/completions", content, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new LlmResult
+                {
+                    Success = false,
+                    ErrorCode = "TRANSPORT_ERROR",
+                    ErrorMessage = $"OpenAI returned HTTP {(int)response.StatusCode} ({response.StatusCode})."
+                };
+            }
+
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (doc.RootElement.TryGetProperty("choices", out var choices)
+                && choices.ValueKind == JsonValueKind.Array
+                && choices.GetArrayLength() > 0)
+            {
+                var first = choices[0];
+                if (first.TryGetProperty("message", out var message)
+                    && message.TryGetProperty("content", out var contentElement)
+                    && contentElement.ValueKind == JsonValueKind.String)
+                {
+                    var contentText = contentElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(contentText))
+                    {
+                        return new LlmResult
+                        {
+                            Success = true,
+                            Content = contentText
+                        };
+                    }
+                }
+            }
+
+            return new LlmResult
+            {
+                Success = false,
+                ErrorCode = "EMPTY_RESPONSE",
+                ErrorMessage = "The model returned empty content."
+            };
+        }
+        catch (Exception ex)
+        {
+            return new LlmResult
+            {
+                Success = false,
+                ErrorCode = "TRANSPORT_ERROR",
+                ErrorMessage = ex.Message
+            };
+        }
     }
 
     /// <summary>

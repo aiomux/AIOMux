@@ -1,8 +1,13 @@
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
+
 namespace AIOMux.Local;
 
 internal static class Program
 {
     private const string SolutionFileName = "solution.json";
+    private static ILoggerFactory? _debugLoggerFactory;
+    private static string? _reportRootDirectory;
 
     private static async Task<int> Main(string[] args)
     {
@@ -37,7 +42,15 @@ internal static class Program
         }
 
         var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
-        var input = args.Length > 1 ? string.Join(' ', args.Skip(1)) : string.Empty;
+        _reportRootDirectory = Path.GetDirectoryName(solutionJsonPath);
+
+        var commandInput = ParseCommandInput(args.Skip(1).ToArray());
+        var input = string.Join(' ', new[] { commandInput.Verb }.Concat(commandInput.Parameters).Where(v => !string.IsNullOrWhiteSpace(v)));
+        var additionalInputs = new Dictionary<string, object?>
+        {
+            ["command_verb"] = commandInput.Verb,
+            ["command_parameters"] = commandInput.Parameters
+        };
 
         try
         {
@@ -52,10 +65,13 @@ internal static class Program
 
         Console.WriteLine("Path: SolutionLoader -> SolutionRunner -> ExecutionRuntime");
 
-        var runner = new SolutionRunner();
+        var runner = CreateRunner();
 
-        var summary = await runner.RunAsync(solutionJsonPath, input);
+        var summary = await runner.RunAsync(solutionJsonPath, input, additionalInputs);
         PrintRunSummary(summary);
+
+        if (!summary.Success && !string.IsNullOrWhiteSpace(summary.Output))
+            TryPrintStructuredError(summary.Output);
 
         return summary.Success ? 0 : 1;
     }
@@ -82,7 +98,7 @@ internal static class Program
             return 1;
         }
 
-        var runner = new SolutionRunner();
+        var runner = CreateRunner();
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
@@ -103,6 +119,24 @@ internal static class Program
         }
 
         return 0;
+    }
+
+    private static CommandInput ParseCommandInput(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            return new CommandInput
+            {
+                Verb = string.Empty,
+                Parameters = []
+            };
+        }
+
+        return new CommandInput
+        {
+            Verb = args[0],
+            Parameters = args.Skip(1).ToArray()
+        };
     }
 
     private static int Validate(string[] args)
@@ -143,6 +177,7 @@ internal static class Program
         }
 
         var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
+        _reportRootDirectory = Path.GetDirectoryName(solutionJsonPath);
         var sourceRunId = args[1];
         var input = args.Length > 2 ? string.Join(' ', args.Skip(2)) : null;
 
@@ -157,11 +192,33 @@ internal static class Program
             return 1;
         }
 
-        var runner = new SolutionRunner();
+        var runner = CreateRunner();
         var summary = await runner.ReplayAsync(solutionJsonPath, sourceRunId, input);
         PrintRunSummary(summary);
 
+        if (!summary.Success && !string.IsNullOrWhiteSpace(summary.Output))
+            TryPrintStructuredError(summary.Output);
+
         return summary.Success ? 0 : 1;
+    }
+
+    private static void TryPrintStructuredError(string output)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(output);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("error", out var errorElement))
+            {
+                var detailedError = errorElement.GetString();
+                if (!string.IsNullOrWhiteSpace(detailedError))
+                    Console.WriteLine($"Detailed error: {detailedError}");
+            }
+        }
+        catch
+        {
+            // Ignore parse errors - output can be plain text.
+        }
     }
 
     private static async Task<int> ForkAsync(string[] args)
@@ -174,6 +231,7 @@ internal static class Program
         }
 
         var solutionJsonPath = ResolveSolutionJsonPath(args[0]);
+        _reportRootDirectory = Path.GetDirectoryName(solutionJsonPath);
         var sourceRunId = args[1];
         if (!int.TryParse(args[2], out var forkStepIndex))
         {
@@ -194,11 +252,41 @@ internal static class Program
             return 1;
         }
 
-        var runner = new SolutionRunner();
+        var runner = CreateRunner();
         var summary = await runner.ForkAsync(solutionJsonPath, sourceRunId, forkStepIndex, input);
         PrintRunSummary(summary);
 
+        if (!summary.Success && !string.IsNullOrWhiteSpace(summary.Output))
+            TryPrintStructuredError(summary.Output);
+
         return summary.Success ? 0 : 1;
+    }
+
+    private static SolutionRunner CreateRunner()
+    {
+        var debugLoggingEnabled = string.Equals(
+            Environment.GetEnvironmentVariable("AIOMUX_DEBUG_LOGGING"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!debugLoggingEnabled)
+            return new SolutionRunner();
+
+        _debugLoggerFactory ??= LoggerFactory.Create(builder =>
+        {
+            builder
+                .SetMinimumLevel(LogLevel.Debug)
+                .AddSimpleConsole(options =>
+                {
+                    options.SingleLine = true;
+                    options.TimestampFormat = "HH:mm:ss ";
+                })
+                .AddDebug();
+        });
+
+        return new SolutionRunner(
+            logger: _debugLoggerFactory.CreateLogger<SolutionRunner>(),
+            loggerFactory: _debugLoggerFactory);
     }
 
     private static string ResolveSolutionJsonPath(string pathOrFolder)
@@ -228,8 +316,59 @@ internal static class Program
         if (!string.IsNullOrWhiteSpace(summary.Error))
             Console.WriteLine($"Error: {summary.Error}");
 
-        if (summary.Success && !string.IsNullOrWhiteSpace(summary.Output))
+        if (!string.IsNullOrWhiteSpace(summary.Output))
+        {
             Console.WriteLine($"Output: {TruncateSingleLine(summary.Output, 180)}");
+
+            var reportPath = WriteReportFile(summary);
+            if (!string.IsNullOrWhiteSpace(reportPath))
+                Console.WriteLine($"Report: {reportPath}");
+        }
+    }
+
+    private static string? WriteReportFile(SolutionExecutionSummary summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary.Output))
+            return null;
+
+        var runId = string.IsNullOrWhiteSpace(summary.RunId)
+            ? DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()
+            : summary.RunId;
+
+        var rootDirectory = string.IsNullOrWhiteSpace(_reportRootDirectory)
+            ? Directory.GetCurrentDirectory()
+            : _reportRootDirectory;
+
+        var reportsDirectory = Path.Combine(rootDirectory, "reports");
+        Directory.CreateDirectory(reportsDirectory);
+
+        var outputText = TryFormatJson(summary.Output, out var formattedJson)
+            ? formattedJson
+            : summary.Output;
+
+        var extension = TryFormatJson(summary.Output, out _) ? "json" : "txt";
+        var fileName = $"aiomux-report-{runId}.{extension}";
+        var fullPath = Path.Combine(reportsDirectory, fileName);
+        File.WriteAllText(fullPath, outputText);
+        return fullPath;
+    }
+
+    private static bool TryFormatJson(string value, out string formatted)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(value);
+            formatted = JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            return true;
+        }
+        catch
+        {
+            formatted = value;
+            return false;
+        }
     }
 
     private static string TruncateSingleLine(string value, int maxLength)

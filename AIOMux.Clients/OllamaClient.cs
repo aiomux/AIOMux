@@ -1,5 +1,6 @@
 ﻿using AIOMux.Core.Configuration;
 using AIOMux.Core.Interfaces;
+using AIOMux.Core.Models;
 using System.Net.Http.Json;
 
 namespace AIOMux.Clients;
@@ -53,21 +54,64 @@ public sealed class OllamaClient : ILLMClient, IDisposable
     /// </summary>
     /// <param name="prompt">The input prompt for the model.</param>
     /// <returns>The generated response as a string.</returns>
-    public async Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
+    public async Task<LlmResult> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
     {
         if (!_rateLimiter.TryRequest())
-            return "[RATE LIMIT EXCEEDED] Please wait before making more requests.";
+        {
+            return new LlmResult
+            {
+                Success = false,
+                ErrorCode = "RATE_LIMIT_EXCEEDED",
+                ErrorMessage = "Please wait before making more requests."
+            };
+        }
 
-        var request = new { model = _model, prompt, stream = false };
+        try
+        {
+            var request = new { model = _model, prompt, stream = false };
 
-        using var response = await _http.PostAsJsonAsync(
-            _generateEndpoint, request, cancellationToken);
+            using var response = await _http.PostAsJsonAsync(_generateEndpoint, request, cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
-            return $"[OLLAMA ERROR] {response.StatusCode}";
+            if (!response.IsSuccessStatusCode)
+            {
+                return new LlmResult
+                {
+                    Success = false,
+                    ErrorCode = "TRANSPORT_ERROR",
+                    ErrorMessage = $"Ollama returned HTTP {(int)response.StatusCode} ({response.StatusCode})."
+                };
+            }
 
-        var json = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(cancellationToken);
-        return json?["response"]?.ToString() ?? "[EMPTY]";
+            var json = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(cancellationToken);
+            var content = json != null && json.TryGetValue("response", out var value)
+                ? value?.ToString()
+                : null;
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return new LlmResult
+                {
+                    Success = false,
+                    ErrorCode = "EMPTY_RESPONSE",
+                    ErrorMessage = "The model returned empty content."
+                };
+            }
+
+            return new LlmResult
+            {
+                Success = true,
+                Content = content
+            };
+        }
+        catch (Exception ex)
+        {
+            return new LlmResult
+            {
+                Success = false,
+                ErrorCode = "TRANSPORT_ERROR",
+                ErrorMessage = ex.Message
+            };
+        }
     }
 
     /// <summary>
@@ -76,19 +120,63 @@ public sealed class OllamaClient : ILLMClient, IDisposable
     /// <param name="userInput">The user input to complete.</param>
     /// <param name="systemPrompt">The system prompt to guide the completion.</param>
     /// <returns>The completed response as a string.</returns>
-    public async Task<string> CompleteAsync(string userInput, string systemPrompt, CancellationToken cancellationToken = default)
+    public async Task<LlmResult> CompleteAsync(string userInput, string systemPrompt, CancellationToken cancellationToken = default)
     {
         if (!_rateLimiter.TryRequest())
-            return "[RATE LIMIT EXCEEDED] Please wait before making more requests.";
+        {
+            return new LlmResult
+            {
+                Success = false,
+                ErrorCode = "RATE_LIMIT_EXCEEDED",
+                ErrorMessage = "Please wait before making more requests."
+            };
+        }
 
-        var request = new { model = _model, prompt = $"{systemPrompt}\n\n{userInput}", stream = false };
+        try
+        {
+            var request = new { model = _model, prompt = $"{systemPrompt}\n\n{userInput}", stream = false };
 
-        using var response = await _http.PostAsJsonAsync(_generateEndpoint, request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            return $"[OLLAMA ERROR] {response.StatusCode}";
+            using var response = await _http.PostAsJsonAsync(_generateEndpoint, request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new LlmResult
+                {
+                    Success = false,
+                    ErrorCode = "TRANSPORT_ERROR",
+                    ErrorMessage = $"Ollama returned HTTP {(int)response.StatusCode} ({response.StatusCode})."
+                };
+            }
 
-        var json = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(cancellationToken);
-        return json?["response"]?.ToString() ?? "[EMPTY]";
+            var json = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>(cancellationToken);
+            var content = json != null && json.TryGetValue("response", out var value)
+                ? value?.ToString()
+                : null;
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                return new LlmResult
+                {
+                    Success = false,
+                    ErrorCode = "EMPTY_RESPONSE",
+                    ErrorMessage = "The model returned empty content."
+                };
+            }
+
+            return new LlmResult
+            {
+                Success = true,
+                Content = content
+            };
+        }
+        catch (Exception ex)
+        {
+            return new LlmResult
+            {
+                Success = false,
+                ErrorCode = "TRANSPORT_ERROR",
+                ErrorMessage = ex.Message
+            };
+        }
     }
 
     /// <inheritdoc />

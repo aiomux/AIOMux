@@ -116,7 +116,7 @@ public sealed class ToolDispatcher
 
             return new ToolDispatchResult
             {
-                ToolResult = new ToolResult { CallId = callId, Success = false, Error = decision.DenyReason },
+                ToolResult = new ToolResult { CallId = callId, Success = false, ErrorCode = "POLICY_DENIED", ErrorMessage = decision.DenyReason },
                 Targets = analyzedTargets,
                 PolicyDenied = true,
                 PolicyDenyReason = decision.DenyReason,
@@ -131,7 +131,7 @@ public sealed class ToolDispatcher
             var reason = $"Tool '{toolName}' must inherit DispatchableToolBase to execute through ToolDispatcher.";
             return new ToolDispatchResult
             {
-                ToolResult = new ToolResult { CallId = callId, Success = false, Error = reason },
+                ToolResult = new ToolResult { CallId = callId, Success = false, ErrorCode = "UNSUPPORTED_TOOL_TYPE", ErrorMessage = reason },
                 Targets = analyzedTargets,
                 PolicyDenied = true,
                 PolicyDenyReason = reason,
@@ -148,8 +148,9 @@ public sealed class ToolDispatcher
             {
                 CallId = callId,
                 Success = cachedResult!.Success,
-                Error = cachedResult.Error,
-                JsonResult = cachedResult.JsonResult
+                JsonResult = cachedResult.JsonResult,
+                ErrorCode = cachedResult.ErrorCode,
+                ErrorMessage = cachedResult.ErrorMessage
             };
 
             events.Add(new ToolResultEvent
@@ -158,7 +159,7 @@ public sealed class ToolDispatcher
                 ToolName = toolName,
                 Success = replayToolResult.Success,
                 Output = replayToolResult.JsonResult,
-                Error = replayToolResult.Error,
+                Error = replayToolResult.ErrorMessage,
                 IsReplayed = true
             });
 
@@ -179,10 +180,10 @@ public sealed class ToolDispatcher
 
         try
         {
-            var output = await dispatchableTool.InvokeAsync(input);
+            toolResult = await dispatchableTool.InvokeAsync(input, ct);
             sw.Stop();
 
-            toolResult = new ToolResult { CallId = callId, Success = true, JsonResult = output };
+            toolResult = toolResult with { CallId = callId };
 
             events.Add(new ToolExecutedEvent
             {
@@ -195,7 +196,13 @@ public sealed class ToolDispatcher
         catch (Exception ex)
         {
             sw.Stop();
-            toolResult = new ToolResult { CallId = callId, Success = false, Error = ex.Message, JsonResult = string.Empty };
+            toolResult = new ToolResult
+            {
+                CallId = callId,
+                Success = false,
+                ErrorCode = "UNEXPECTED_EXCEPTION",
+                ErrorMessage = ex.Message
+            };
         }
 
         events.Add(new ToolResultEvent
@@ -204,7 +211,7 @@ public sealed class ToolDispatcher
             ToolName = toolName,
             Success = toolResult.Success,
             Output = toolResult.JsonResult,
-            Error = toolResult.Error
+            Error = toolResult.ErrorMessage
         });
 
         return new ToolDispatchResult
